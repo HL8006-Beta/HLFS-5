@@ -2816,6 +2816,7 @@
         createClouds();
         createAircraft();
         initTireSmoke();
+        initRocketSmokePool();
         initPrecipitation();
         atcSystem.init();
         aiTraffic.init();
@@ -8025,144 +8026,453 @@
     // -------------------------------------------------------------
     function createAIAircraftMesh(primaryColor, accentColor, acType = 'prop') {
       const group = new THREE.Group();
-      const isTwin = (acType === 'twin' || acType === true);
-      const isJet = (acType === 'jet');
+      const isAirliner = (acType === 'airliner' || acType === 'passenger_jet');
+      const isFighter = (acType === 'fighter' || acType === 'fighter_jet' || acType === 'jet');
+      const isTwin = (acType === 'twin' || acType === 'turboprop');
+      const isProp = (!isAirliner && !isFighter && !isTwin);
 
       const liveryMat = new THREE.MeshStandardMaterial({
         color: primaryColor,
-        roughness: 0.32,
-        metalness: 0.20
+        roughness: 0.28,
+        metalness: 0.25
       });
       const trimMat = new THREE.MeshStandardMaterial({
         color: accentColor,
-        roughness: 0.35,
+        roughness: 0.32,
         metalness: 0.35
+      });
+      const fuselageWhiteMat = new THREE.MeshStandardMaterial({
+        color: 0xf8fafc,
+        roughness: 0.24,
+        metalness: 0.15
       });
       const darkCompositeMat = new THREE.MeshStandardMaterial({
         color: 0x1e293b,
-        roughness: 0.7,
-        metalness: 0.2
+        roughness: 0.70,
+        metalness: 0.20
       });
       const chromeMat = new THREE.MeshStandardMaterial({
         color: 0xdbeafe,
-        roughness: 0.18,
-        metalness: 0.88
+        roughness: 0.12,
+        metalness: 0.92
       });
-      const glassMat = new THREE.MeshPhysicalMaterial({
-        color: 0x0c1e30,
-        roughness: 0.08,
-        metalness: 0.9,
-        transmission: 0.5,
+      const glassMat = new THREE.MeshStandardMaterial({
+        color: 0x07111e,
+        roughness: 0.06,
+        metalness: 0.90,
         transparent: true,
         opacity: 0.90
+      });
+      const windowLitMat = new THREE.MeshBasicMaterial({
+        color: 0xfef08a
       });
 
       const airframeGroup = new THREE.Group();
       const props = [];
-      let beacon = null;
+      const fans = [];
+      const afterburners = [];
+      const beacons = [];
 
-      if (isJet) {
+      if (isAirliner) {
         // =============================================================
-        // JET AI AIRCRAFT: Swept Wings, Rear Turbofans, T-Tail
+        // COMMERCIAL TWIN-TURBOFAN PASSENGER JET (A320 / B737 Caliber)
         // =============================================================
-        const jetFuselage = new THREE.Mesh(new THREE.CylinderGeometry(0.58, 0.58, 6.8, 16), liveryMat);
-        jetFuselage.rotation.x = -Math.PI / 2;
-        jetFuselage.position.set(0, 0.42, 0.2);
-        jetFuselage.castShadow = true;
-        airframeGroup.add(jetFuselage);
+        // Main Fuselage (Cylindrical passenger cabin)
+        const fuseGeo = new THREE.CylinderGeometry(1.22, 1.22, 14.8, 20);
+        fuseGeo.rotateX(-Math.PI / 2);
+        const fuselage = new THREE.Mesh(fuseGeo, fuselageWhiteMat);
+        fuselage.position.set(0, 1.15, 0.4);
+        fuselage.castShadow = true;
+        airframeGroup.add(fuselage);
 
-        // Needle Nose
-        const jetNose = new THREE.Mesh(new THREE.ConeGeometry(0.58, 2.2, 16), liveryMat);
-        jetNose.rotation.x = -Math.PI / 2;
-        jetNose.position.set(0, 0.42, -4.2);
-        jetNose.castShadow = true;
-        airframeGroup.add(jetNose);
+        // Lower Fuselage Belly / Wing-to-Body Fairing
+        const bellyGeo = new THREE.BoxGeometry(2.55, 0.45, 5.8);
+        const belly = new THREE.Mesh(bellyGeo, trimMat);
+        belly.position.set(0, 0.48, 0.3);
+        belly.castShadow = true;
+        airframeGroup.add(belly);
 
-        // Cockpit Glass
-        const jetCockpit = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.52, 1.4), glassMat);
-        jetCockpit.position.set(0, 0.72, -2.4);
-        jetCockpit.rotation.x = 0.35;
-        airframeGroup.add(jetCockpit);
+        // Streamlined Nose Radome
+        const noseGeo = new THREE.ConeGeometry(1.22, 3.2, 20);
+        noseGeo.rotateX(-Math.PI / 2);
+        const nose = new THREE.Mesh(noseGeo, fuselageWhiteMat);
+        nose.position.set(0, 1.15, -8.6);
+        nose.castShadow = true;
+        airframeGroup.add(nose);
 
-        // Swept Wings (15.5m span)
+        // Radome Cap Tip
+        const noseTip = new THREE.Mesh(new THREE.SphereGeometry(0.28, 12, 12), darkCompositeMat);
+        noseTip.position.set(0, 1.15, -10.2);
+        airframeGroup.add(noseTip);
+
+        // Cockpit Windshield Visor (Multi-pane dark aviation glass)
+        const cockpitGlass = new THREE.Mesh(new THREE.BoxGeometry(1.45, 0.42, 0.95), glassMat);
+        cockpitGlass.position.set(0, 1.62, -7.8);
+        cockpitGlass.rotation.x = 0.42;
+        airframeGroup.add(cockpitGlass);
+
+        // Passenger Cabin Window Strips (Illuminated warm golden squares)
+        [-1.23, 1.23].forEach(side => {
+          for (let w = -5.8; w <= 6.2; w += 0.68) {
+            const win = new THREE.Mesh(new THREE.PlaneGeometry(0.18, 0.22), windowLitMat);
+            win.position.set(side, 1.35, w);
+            win.rotation.y = side > 0 ? Math.PI / 2 : -Math.PI / 2;
+            airframeGroup.add(win);
+          }
+          // Forward & Aft Passenger Doors (Outline frame)
+          [-6.2, 5.8].forEach(dz => {
+            const door = new THREE.Mesh(new THREE.BoxGeometry(0.04, 1.05, 0.55), trimMat);
+            door.position.set(side, 1.25, dz);
+            airframeGroup.add(door);
+          });
+        });
+
+        // Tailcone & APU Exhaust Nozzle
+        const tailconeGeo = new THREE.ConeGeometry(1.22, 4.2, 20);
+        tailconeGeo.rotateX(Math.PI / 2);
+        const tailcone = new THREE.Mesh(tailconeGeo, fuselageWhiteMat);
+        tailcone.position.set(0, 1.28, 9.9);
+        tailcone.castShadow = true;
+        airframeGroup.add(tailcone);
+
+        const apuNozzle = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.14, 0.35, 12), darkCompositeMat);
+        apuNozzle.rotation.x = Math.PI / 2;
+        apuNozzle.position.set(0, 1.48, 12.0);
+        airframeGroup.add(apuNozzle);
+
+        // Swept Low Wings with Authentic 4.5° Dihedral Angle (23.5m Wingspan)
         [-1, 1].forEach(side => {
-          const wingGeo = new THREE.BufferGeometry();
-          const rX = side * 0.55, tX = side * 7.75;
+          const wingGroup = new THREE.Group();
+          wingGroup.position.set(side * 1.15, 0.52, 0.2);
+          wingGroup.rotation.z = side * 0.078; // 4.5 deg dihedral
+
+          const wingShape = new THREE.BufferGeometry();
+          const rX = 0, tX = side * 10.6;
           const verts = new Float32Array([
-            rX, 0.25, 0.4,
-            tX, 0.45, 1.8,
-            tX, 0.45, 2.4,
-            rX, 0.25, 0.4,
-            tX, 0.45, 2.4,
-            rX, 0.25, 1.9
+            rX, 0.0, -1.8,
+            tX, 0.0, 1.6,
+            tX, 0.0, 2.5,
+            rX, 0.0, -1.8,
+            tX, 0.0, 2.5,
+            rX, 0.0, 1.4
           ]);
-          wingGeo.setAttribute('position', new THREE.BufferAttribute(verts, 3));
-          wingGeo.computeVertexNormals();
-          const wMesh = new THREE.Mesh(wingGeo, liveryMat);
-          wMesh.castShadow = true;
-          airframeGroup.add(wMesh);
+          wingShape.setAttribute('position', new THREE.BufferAttribute(verts, 3));
+          wingShape.computeVertexNormals();
+          const wingMesh = new THREE.Mesh(wingShape, fuselageWhiteMat);
+          wingMesh.castShadow = true;
+          wingGroup.add(wingMesh);
 
-          // Swept Winglet
-          const wlet = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.65, 0.45), trimMat);
-          wlet.position.set(tX, 0.75, 2.1);
-          wlet.rotation.z = side * 0.16;
-          airframeGroup.add(wlet);
+          // Trailing Edge Flap Track Canoe Fairings (3 per wing)
+          [3.2, 6.4, 9.2].forEach((fx, idx) => {
+            const fairing = new THREE.Mesh(new THREE.ConeGeometry(0.14, 1.2, 8), trimMat);
+            fairing.rotation.x = Math.PI / 2;
+            fairing.position.set(side * fx, -0.12, 0.8 + idx * 0.5);
+            fairing.scale.set(1.0, 1.0, 0.55);
+            wingGroup.add(fairing);
+          });
 
-          // Nav light
-          const nav = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), new THREE.MeshBasicMaterial({ color: side > 0 ? 0x22c55e : 0xef4444 }));
-          nav.position.set(tX + side * 0.05, 0.78, 2.1);
-          airframeGroup.add(nav);
+          // Blended Winglet / Sharklet
+          const wletGeo = new THREE.BoxGeometry(0.08, 1.15, 0.65);
+          const wlet = new THREE.Mesh(wletGeo, liveryMat);
+          wlet.position.set(tX, 0.55, 2.05);
+          wlet.rotation.z = side * 0.18;
+          wlet.castShadow = true;
+          wingGroup.add(wlet);
+
+          // Wingtip Navigation Light & Strobe LED
+          const navCol = side > 0 ? 0x10b981 : 0xef4444;
+          const navLamp = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 8), new THREE.MeshBasicMaterial({ color: navCol }));
+          navLamp.position.set(tX + side * 0.06, 0.55, 1.75);
+          wingGroup.add(navLamp);
+
+          airframeGroup.add(wingGroup);
         });
 
-        // Twin Rear Turbofan Pods
-        [-1.4, 1.4].forEach(px => {
-          const pod = new THREE.Group();
-          pod.position.set(px, 0.55, 1.4);
+        // Dual Underwing High-Bypass Turbofans (Intake Lip, Rotating Spinner, Exhaust Nozzle)
+        [-3.8, 3.8].forEach(ex => {
+          const eng = new THREE.Group();
+          eng.position.set(ex, 0.15, -0.4);
 
-          const pylon = new THREE.Mesh(new THREE.BoxGeometry(Math.abs(px) * 0.5, 0.12, 0.9), darkCompositeMat);
-          pylon.position.set(px > 0 ? -0.38 : 0.38, 0, 0);
-          pod.add(pylon);
+          // Aerodynamic Pylon
+          const pylon = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.55, 2.2), darkCompositeMat);
+          pylon.position.set(0, 0.42, 0.1);
+          eng.add(pylon);
 
-          const nacelle = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.30, 2.2, 14), liveryMat);
-          nacelle.rotation.x = -Math.PI / 2;
-          nacelle.castShadow = true;
-          pod.add(nacelle);
+          // Turbofan Cowling
+          const cowlGeo = new THREE.CylinderGeometry(0.68, 0.64, 3.2, 18);
+          cowlGeo.rotateX(-Math.PI / 2);
+          const cowl = new THREE.Mesh(cowlGeo, liveryMat);
+          cowl.castShadow = true;
+          eng.add(cowl);
 
-          const lip = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.04, 8, 16), chromeMat);
-          lip.position.set(0, 0, -1.1);
-          pod.add(lip);
+          // Chrome Air Intake Lip
+          const lipGeo = new THREE.TorusGeometry(0.64, 0.05, 8, 20);
+          const lip = new THREE.Mesh(lipGeo, chromeMat);
+          lip.position.set(0, 0, -1.6);
+          eng.add(lip);
 
-          // Exhaust nozzle with glow
-          const exNozzle = new THREE.Mesh(
-            new THREE.CylinderGeometry(0.25, 0.22, 0.35, 14),
-            new THREE.MeshStandardMaterial({ color: 0x09090b, emissive: 0xf97316, emissiveIntensity: 0.9 })
+          // Spinning Titanium Fan Hub & Multi-Blade Spinner
+          const fanUnit = new THREE.Group();
+          fanUnit.position.set(0, 0, -1.35);
+          const spinCone = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.48, 14), chromeMat);
+          spinCone.rotation.x = -Math.PI / 2;
+          fanUnit.add(spinCone);
+          const fanBlades = new THREE.Mesh(
+            new THREE.CircleGeometry(0.58, 16),
+            new THREE.MeshBasicMaterial({ color: 0x64748b, transparent: true, opacity: 0.55, side: THREE.DoubleSide })
           );
-          exNozzle.rotation.x = -Math.PI / 2;
-          exNozzle.position.set(0, 0, 1.25);
-          pod.add(exNozzle);
+          fanUnit.add(fanBlades);
+          eng.add(fanUnit);
+          fans.push(fanUnit);
 
-          airframeGroup.add(pod);
+          // Exhaust Core & Plug Cone
+          const exhaust = new THREE.Mesh(new THREE.CylinderGeometry(0.52, 0.46, 0.5, 16), darkCompositeMat);
+          exhaust.rotation.x = -Math.PI / 2;
+          exhaust.position.set(0, 0, 1.8);
+          const plugCone = new THREE.Mesh(new THREE.ConeGeometry(0.25, 0.65, 12), darkCompositeMat);
+          plugCone.rotation.x = Math.PI / 2;
+          plugCone.position.set(0, 0, 2.15);
+          eng.add(exhaust, plugCone);
+
+          airframeGroup.add(eng);
         });
 
-        // Swept T-Tail
-        const fin = new THREE.Mesh(new THREE.BoxGeometry(0.12, 2.2, 1.6), trimMat);
-        fin.position.set(0, 1.65, 3.2);
-        fin.rotation.x = -0.35;
+        // Swept Vertical Fin with Airline Tail Livery
+        const finGeo = new THREE.BoxGeometry(0.18, 3.8, 2.6);
+        const fin = new THREE.Mesh(finGeo, liveryMat);
+        fin.position.set(0, 3.15, 8.2);
+        fin.rotation.x = -0.42;
         fin.castShadow = true;
         airframeGroup.add(fin);
 
-        const tTail = new THREE.Mesh(new THREE.BoxGeometry(4.2, 0.1, 0.9), liveryMat);
-        tTail.position.set(0, 2.7, 3.4);
-        tTail.castShadow = true;
-        airframeGroup.add(tTail);
+        const finCap = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.45, 1.4), trimMat);
+        finCap.position.set(0, 4.95, 9.1);
+        finCap.rotation.x = -0.42;
+        airframeGroup.add(finCap);
 
-        beacon = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), new THREE.MeshBasicMaterial({ color: 0xff0000 }));
-        beacon.position.set(0, 2.82, 3.35);
-        airframeGroup.add(beacon);
+        // Swept Horizontal Stabilators (8.2m span)
+        const stabGeo = new THREE.BoxGeometry(7.6, 0.12, 1.4);
+        const stab = new THREE.Mesh(stabGeo, fuselageWhiteMat);
+        stab.position.set(0, 1.85, 9.8);
+        stab.castShadow = true;
+        airframeGroup.add(stab);
+
+        // Red Anti-Collision Flashing Beacons (Dorsal & Ventral)
+        const bDorsal = new THREE.Mesh(new THREE.SphereGeometry(0.11, 8, 8), new THREE.MeshBasicMaterial({ color: 0xff0000 }));
+        bDorsal.position.set(0, 2.45, -0.8);
+        const bVentral = new THREE.Mesh(new THREE.SphereGeometry(0.11, 8, 8), new THREE.MeshBasicMaterial({ color: 0xff0000 }));
+        bVentral.position.set(0, -0.05, 0.2);
+        airframeGroup.add(bDorsal, bVentral);
+        beacons.push(bDorsal, bVentral);
+
+        // Multi-Wheel Landing Gear (Dual Nose Wheels, Dual 4-Wheel Main Gear Bogies)
+        const nStrut = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.85, 8), chromeMat);
+        nStrut.position.set(0, -0.15, -7.2);
+        airframeGroup.add(nStrut);
+        [-0.14, 0.14].forEach(nw => {
+          const tire = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.14, 12), darkCompositeMat);
+          tire.rotation.z = Math.PI / 2;
+          tire.position.set(nw, -0.52, -7.2);
+          airframeGroup.add(tire);
+        });
+
+        [-2.6, 2.6].forEach(mx => {
+          const mStrut = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.95, 8), chromeMat);
+          mStrut.position.set(mx, -0.15, 0.6);
+          airframeGroup.add(mStrut);
+          // 4-wheel bogie
+          [-0.22, 0.22].forEach(bw => {
+            [-0.22, 0.22].forEach(bz => {
+              const tire = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.18, 12), darkCompositeMat);
+              tire.rotation.z = Math.PI / 2;
+              tire.position.set(mx + bw, -0.48, 0.6 + bz);
+              airframeGroup.add(tire);
+            });
+          });
+        });
+
+      } else if (isFighter) {
+        // =============================================================
+        // SUPERSONIC TACTICAL STRIKE FIGHTER (F/A-18 / F-15 Combat Caliber)
+        // =============================================================
+        // Chined Supersonic Fuselage with Blended LERX
+        const fuseGeo = new THREE.BoxGeometry(1.65, 0.82, 8.4);
+        const fuselage = new THREE.Mesh(fuseGeo, liveryMat);
+        fuselage.position.set(0, 0.42, 0.2);
+        fuselage.castShadow = true;
+        airframeGroup.add(fuselage);
+
+        // Sharp Supersonic Needle Radome
+        const radomeGeo = new THREE.ConeGeometry(0.65, 3.4, 16);
+        radomeGeo.rotateX(-Math.PI / 2);
+        const radome = new THREE.Mesh(radomeGeo, darkCompositeMat);
+        radome.position.set(0, 0.38, -5.7);
+        radome.castShadow = true;
+        airframeGroup.add(radome);
+
+        // Tactical Bubble Canopy with Dark Mirrored Aviation Glass & Pilot Seat
+        const canopyGeo = new THREE.SphereGeometry(0.55, 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.5);
+        canopyGeo.scale(0.85, 1.15, 2.4);
+        const canopy = new THREE.Mesh(canopyGeo, glassMat);
+        canopy.position.set(0, 0.72, -2.1);
+        canopy.rotation.x = -0.15;
+        airframeGroup.add(canopy);
+
+        // Pilot Ejection Seat Silhouette inside canopy
+        const seat = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.55, 0.35), darkCompositeMat);
+        seat.position.set(0, 0.72, -2.1);
+        airframeGroup.add(seat);
+
+        // Leading-Edge Root Extensions (LERX strakes)
+        [-1, 1].forEach(side => {
+          const lerxGeo = new THREE.BufferGeometry();
+          const verts = new Float32Array([
+            side * 0.82, 0.38, -3.2,
+            side * 1.65, 0.38, -0.4,
+            side * 0.82, 0.38, -0.4
+          ]);
+          lerxGeo.setAttribute('position', new THREE.BufferAttribute(verts, 3));
+          lerxGeo.computeVertexNormals();
+          const lerx = new THREE.Mesh(lerxGeo, trimMat);
+          airframeGroup.add(lerx);
+        });
+
+        // Twin Supersonic Intakes with Boundary-Layer Splitter Plates
+        [-0.88, 0.88].forEach(ix => {
+          const intake = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.42, 1.8), darkCompositeMat);
+          intake.position.set(ix, 0.22, -1.2);
+          intake.rotation.y = ix > 0 ? -0.08 : 0.08;
+          airframeGroup.add(intake);
+        });
+
+        // Cropped Delta Main Wings (11.8m span)
+        const wingSpan = 11.8;
+        [-1, 1].forEach(side => {
+          const wingGeo = new THREE.BufferGeometry();
+          const rX = side * 0.82, tX = side * (wingSpan * 0.5);
+          const verts = new Float32Array([
+            rX, 0.38, -0.4,
+            tX, 0.38, 1.6,
+            tX, 0.38, 2.4,
+            rX, 0.38, -0.4,
+            tX, 0.38, 2.4,
+            rX, 0.38, 2.2
+          ]);
+          wingGeo.setAttribute('position', new THREE.BufferAttribute(verts, 3));
+          wingGeo.computeVertexNormals();
+          const wing = new THREE.Mesh(wingGeo, liveryMat);
+          wing.castShadow = true;
+          airframeGroup.add(wing);
+
+          // Wingtip Missile Launch Rail
+          const rail = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.06, 2.9), darkCompositeMat);
+          rail.position.set(tX, 0.38, 2.0);
+          airframeGroup.add(rail);
+
+          // Procedural AIM-9 Sidewinder Missile Mounted on Wingtip
+          const aim9 = new THREE.Group();
+          aim9.position.set(tX, 0.32, 2.0);
+          // Missile body
+          const body = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 2.4, 10), new THREE.MeshStandardMaterial({ color: 0xd1d5db, roughness: 0.3 }));
+          body.rotation.x = -Math.PI / 2;
+          aim9.add(body);
+          // Optical seeker nose dome
+          const seeker = new THREE.Mesh(new THREE.SphereGeometry(0.046, 8, 8), new THREE.MeshBasicMaterial({ color: 0x111827 }));
+          seeker.position.set(0, 0, -1.22);
+          aim9.add(seeker);
+          // Warhead yellow hazard band
+          const band = new THREE.Mesh(new THREE.CylinderGeometry(0.047, 0.047, 0.08, 10), new THREE.MeshBasicMaterial({ color: 0xfacc15 }));
+          band.rotation.x = -Math.PI / 2;
+          band.position.set(0, 0, -0.85);
+          aim9.add(band);
+          // 4 forward canards
+          [0, Math.PI / 2].forEach(rot => {
+            const canard = new THREE.Mesh(new THREE.BoxGeometry(rot === 0 ? 0.28 : 0.01, rot === 0 ? 0.01 : 0.28, 0.18), darkCompositeMat);
+            canard.position.set(0, 0, -0.65);
+            aim9.add(canard);
+          });
+          // 4 aft delta fins
+          [0, Math.PI / 2].forEach(rot => {
+            const fin = new THREE.Mesh(new THREE.BoxGeometry(rot === 0 ? 0.44 : 0.01, rot === 0 ? 0.01 : 0.44, 0.35), darkCompositeMat);
+            fin.position.set(0, 0, 1.0);
+            aim9.add(fin);
+          });
+          airframeGroup.add(aim9);
+
+          // Nav light
+          const nav = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 6), new THREE.MeshBasicMaterial({ color: side > 0 ? 0x10b981 : 0xef4444 }));
+          nav.position.set(tX + side * 0.06, 0.42, 1.95);
+          airframeGroup.add(nav);
+        });
+
+        // Twin Outward-Canted Vertical Stabilizers (18° cant)
+        [-0.72, 0.72].forEach(tx => {
+          const vfin = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.95, 1.6), liveryMat);
+          vfin.position.set(tx, 1.35, 2.6);
+          vfin.rotation.z = tx > 0 ? -0.31 : 0.31; // 18 deg outward cant
+          vfin.rotation.x = -0.32;
+          vfin.castShadow = true;
+          airframeGroup.add(vfin);
+        });
+
+        // All-Moving Horizontal Slab Stabilators
+        [-1.4, 1.4].forEach(sx => {
+          const stab = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.06, 1.4), trimMat);
+          stab.position.set(sx, 0.38, 3.5);
+          stab.rotation.y = sx > 0 ? -0.15 : 0.15;
+          stab.castShadow = true;
+          airframeGroup.add(stab);
+        });
+
+        // Twin Afterburner Nozzles with Dynamic Combustion Fire Cones
+        [-0.46, 0.46].forEach(ex => {
+          const eng = new THREE.Group();
+          eng.position.set(ex, 0.38, 4.4);
+
+          const nozzle = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.28, 0.65, 14), darkCompositeMat);
+          nozzle.rotation.x = -Math.PI / 2;
+          eng.add(nozzle);
+
+          // Pulsating Afterburner Flame Cone
+          const flameGeo = new THREE.ConeGeometry(0.24, 2.1, 12);
+          flameGeo.rotateX(Math.PI / 2);
+          const flameMat = new THREE.MeshBasicMaterial({
+            color: 0x38bdf8,
+            transparent: true,
+            opacity: 0.85,
+            blending: THREE.AdditiveBlending
+          });
+          const flame = new THREE.Mesh(flameGeo, flameMat);
+          flame.position.set(0, 0, 1.25);
+          eng.add(flame);
+          afterburners.push(flame);
+
+          airframeGroup.add(eng);
+        });
+
+        // Anti-collision beacon
+        const beaconFighter = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), new THREE.MeshBasicMaterial({ color: 0xff0000 }));
+        beaconFighter.position.set(0, 0.86, 0.2);
+        airframeGroup.add(beaconFighter);
+        beacons.push(beaconFighter);
+
+        // Military Tricycle Landing Gear
+        [
+          [0, -0.15, -3.2],
+          [-1.25, -0.15, 0.5],
+          [1.25, -0.15, 0.5]
+        ].forEach(pos => {
+          const strut = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.65, 8), chromeMat);
+          strut.position.set(pos[0], pos[1], pos[2]);
+          const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.14, 12), darkCompositeMat);
+          wheel.rotation.z = Math.PI / 2;
+          wheel.position.set(pos[0], pos[1] - 0.32, pos[2]);
+          airframeGroup.add(strut, wheel);
+        });
 
       } else if (isTwin) {
         // =============================================================
-        // TWIN-ENGINE PROP AI: Wide Wings, Dual Nacelles, T-Tail
+        // TWIN-ENGINE REGIONAL TURBOPROP (King Air 350 Caliber)
         // =============================================================
         const twinCabin = new THREE.Mesh(new THREE.BoxGeometry(1.30, 1.35, 6.2), liveryMat);
         twinCabin.position.set(0, 0.45, 0.2);
@@ -8179,6 +8489,16 @@
         twinCanopy.rotation.x = 0.32;
         airframeGroup.add(twinCanopy);
 
+        // Passenger windows
+        [-0.66, 0.66].forEach(side => {
+          for (let w = -1.2; w <= 2.4; w += 0.72) {
+            const win = new THREE.Mesh(new THREE.PlaneGeometry(0.14, 0.18), windowLitMat);
+            win.position.set(side, 0.65, w);
+            win.rotation.y = side > 0 ? Math.PI / 2 : -Math.PI / 2;
+            airframeGroup.add(win);
+          }
+        });
+
         // Wide Wings (16.2m span)
         const wingSpan = 16.2;
         const wing = new THREE.Mesh(new THREE.BoxGeometry(wingSpan * 0.95, 0.18, 1.5), liveryMat);
@@ -8192,7 +8512,7 @@
           winglet.rotation.z = side * 0.18;
           airframeGroup.add(winglet);
 
-          const nav = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), new THREE.MeshBasicMaterial({ color: side > 0 ? 0x22c55e : 0xef4444 }));
+          const nav = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), new THREE.MeshBasicMaterial({ color: side > 0 ? 0x10b981 : 0xef4444 }));
           nav.position.set(side * wingSpan * 0.48, 0.50, -0.15);
           airframeGroup.add(nav);
         });
@@ -8214,7 +8534,7 @@
 
           const disc = new THREE.Mesh(
             new THREE.CircleGeometry(1.1, 16),
-            new THREE.MeshBasicMaterial({ color: 0x94a3b8, transparent: true, opacity: 0.35, side: THREE.DoubleSide })
+            new THREE.MeshBasicMaterial({ color: 0x94a3b8, transparent: true, opacity: 0.38, side: THREE.DoubleSide })
           );
           propUnit.add(disc);
           airframeGroup.add(propUnit);
@@ -8231,13 +8551,28 @@
         stab.position.set(0, 2.7, 3.25);
         airframeGroup.add(stab);
 
-        beacon = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), new THREE.MeshBasicMaterial({ color: 0xff0000 }));
-        beacon.position.set(0, 2.82, 3.15);
-        airframeGroup.add(beacon);
+        const bTwin = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), new THREE.MeshBasicMaterial({ color: 0xff0000 }));
+        bTwin.position.set(0, 2.82, 3.15);
+        airframeGroup.add(bTwin);
+        beacons.push(bTwin);
+
+        // Landing gear
+        [
+          [0, -0.25, -2.4],
+          [-2.2, -0.25, -0.2],
+          [2.2, -0.25, -0.2]
+        ].forEach(pos => {
+          const strut = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.65, 6), darkCompositeMat);
+          strut.position.set(pos[0], pos[1], pos[2]);
+          const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.14, 10), darkCompositeMat);
+          wheel.rotation.z = Math.PI / 2;
+          wheel.position.set(pos[0], pos[1] - 0.32, pos[2]);
+          airframeGroup.add(strut, wheel);
+        });
 
       } else {
         // =============================================================
-        // SINGLE-ENGINE PROP AI (Standard Sport/Trainer)
+        // SINGLE-ENGINE AEROBATIC SPORT PLANE (Cirrus SR22 Caliber)
         // =============================================================
         const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.22, 1.25, 3.4), liveryMat);
         cabin.position.set(0, 0.28, 0.1);
@@ -8288,9 +8623,10 @@
         stab.position.set(0, 0.65, 4.4);
         airframeGroup.add(stab);
 
-        beacon = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), new THREE.MeshBasicMaterial({ color: 0xff0000 }));
-        beacon.position.set(0, 2.15, 3.9);
-        airframeGroup.add(beacon);
+        const bProp = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), new THREE.MeshBasicMaterial({ color: 0xff0000 }));
+        bProp.position.set(0, 2.15, 3.9);
+        airframeGroup.add(bProp);
+        beacons.push(bProp);
 
         // Nose Propeller
         const propUnit = new THREE.Group();
@@ -8304,24 +8640,36 @@
         propUnit.position.set(0, 0.22, -3.15);
         airframeGroup.add(propUnit);
         props.push(propUnit);
+
+        // Tricycle Landing Gear
+        [
+          [0, -0.32, -1.4],
+          [-1.3, -0.32, 0.1],
+          [1.3, -0.32, 0.1]
+        ].forEach(pos => {
+          const strut = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.65, 6), darkCompositeMat);
+          strut.position.set(pos[0], pos[1], pos[2]);
+          const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.12, 10), darkCompositeMat);
+          wheel.rotation.z = Math.PI / 2;
+          wheel.position.set(pos[0], pos[1] - 0.32, pos[2]);
+          airframeGroup.add(strut, wheel);
+        });
       }
 
-      // Tricycle Landing Gear
-      [
-        [0, -0.32, -1.4],
-        [-1.3, -0.32, 0.1],
-        [1.3, -0.32, 0.1]
-      ].forEach(pos => {
-        const strut = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.65, 6), darkCompositeMat);
-        strut.position.set(pos[0], pos[1], pos[2]);
-        const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.12, 10), darkCompositeMat);
-        wheel.rotation.z = Math.PI / 2;
-        wheel.position.set(pos[0], pos[1] - 0.32, pos[2]);
-        airframeGroup.add(strut, wheel);
-      });
-
       group.add(airframeGroup);
-      group.userData = { props, beacon, isJet, isTwin };
+      const collisionRadius = isAirliner ? 16.0 : (isFighter ? 8.5 : (isTwin ? 9.0 : 6.0));
+      group.userData = {
+        props,
+        fans,
+        afterburners,
+        beacons,
+        beacon: beacons.length > 0 ? beacons[0] : null,
+        isAirliner,
+        isFighter,
+        isTwin,
+        isProp,
+        collisionRadius
+      };
       return group;
     }
 
@@ -8347,8 +8695,15 @@
       // 2. Check other AI aircraft on runway
       if (window.aiTraffic && window.aiTraffic.aircraft) {
         for (const ac of window.aiTraffic.aircraft) {
-          if (ac.id === callerId) continue;
-          if (['LINE_UP', 'TAKEOFF_ROLL', 'TOUCHDOWN', 'ROLLOUT'].includes(ac.state)) {
+          if (ac.id === callerId || ac.isDestroyed || ac.state === 'CRASHED_TUMBLING') continue;
+          const onRwyPhys = Math.abs(ac.pos.x) < 32 && Math.abs(ac.pos.z) < 1320 && ac.pos.y < 14;
+          const isTakingOffOrLanding = (ac.state && (
+            ac.state.includes('LINEUP') || ac.state.includes('LINE_UP') ||
+            ac.state.includes('TAKEOFF') || ac.state.includes('TOUCHDOWN') ||
+            ac.state.includes('FLARE') || ac.state.includes('ROLLOUT') ||
+            ac.state.includes('ROTATION') || ac.state.includes('SCRAMBLE_ROLL')
+          ));
+          if (onRwyPhys || isTakingOffOrLanding) {
             return { occupied: true, by: ac.id, reason: `${ac.id} on runway (${ac.state})` };
           }
         }
@@ -8364,19 +8719,21 @@
       return ang;
     }
 
-    function updateAIAircraftOrientation(ac, dt, targetHeading, targetPitch = 0, maxTurnRate = 0.55) {
+    function updateAIAircraftOrientation(ac, dt, targetHeading, targetPitch = 0, maxTurnRate = 0.55, maxBank = 0.44) {
       const headingDiff = normalizeAngle(targetHeading - ac.rotY);
       const turnStep = THREE.MathUtils.clamp(headingDiff, -maxTurnRate * dt, maxTurnRate * dt);
       ac.rotY += turnStep;
 
-      // Coordinated aerodynamic banking into the turn (up to ~25 deg)
+      // Coordinated aerodynamic banking into the turn
       const turnRateActual = turnStep / Math.max(0.001, dt);
-      const targetBank = -THREE.MathUtils.clamp((turnRateActual * ac.speed) / 9.81 * 0.45, -0.44, 0.44);
+      const targetBank = -THREE.MathUtils.clamp((turnRateActual * ac.speed) / 9.81 * 0.45, -maxBank, maxBank);
       ac.bank = THREE.MathUtils.lerp(ac.bank || 0, targetBank, dt * 4.0);
       ac.pitch = THREE.MathUtils.lerp(ac.pitch || 0, targetPitch, dt * 4.0);
 
-      ac.mesh.position.copy(ac.pos);
-      ac.mesh.rotation.set(ac.pitch, ac.rotY, ac.bank, 'YXZ');
+      if (ac.mesh) {
+        ac.mesh.position.copy(ac.pos);
+        ac.mesh.rotation.set(ac.pitch, ac.rotY, ac.bank, 'YXZ');
+      }
     }
 
     function updateAITaxiOrientation(ac, dt, targetHeading, maxTurnRate = 0.75) {
@@ -8386,8 +8743,14 @@
       ac.bank = THREE.MathUtils.lerp(ac.bank || 0, 0, dt * 6.0);
       ac.pitch = THREE.MathUtils.lerp(ac.pitch || 0, 0, dt * 6.0);
 
-      ac.mesh.position.copy(ac.pos);
-      ac.mesh.rotation.set(ac.pitch, ac.rotY, ac.bank, 'YXZ');
+      if (ac.mesh) {
+        ac.mesh.position.copy(ac.pos);
+        ac.mesh.rotation.set(ac.pitch, ac.rotY, ac.bank, 'YXZ');
+      }
+    }
+
+    function getLocalizerHeading(xOffset, maxIntercept = 0.45) {
+      return THREE.MathUtils.clamp(-xOffset * 0.025, -maxIntercept, maxIntercept);
     }
 
     // -------------------------------------------------------------
@@ -8475,597 +8838,1055 @@
       }
 
       init() {
-        // 1. SkyLine 42 (Cirrus Single-Prop - Cobalt Blue/White: 3-deg Precision ILS Approach & Landing)
-        const a1Mesh = createAIAircraftMesh(0x0284c7, 0xf8fafc, 'prop');
+        this.aircraft = [];
+
+        // 1. Pacific Air 204: A320neo Passenger Airliner (Alpine White / Oceanic Blue)
+        const a1Mesh = createAIAircraftMesh(0xf8fafc, 0x0284c7, 'airliner');
         scene.add(a1Mesh);
-        this.aircraft.push({
-          id: 'SkyLine 42',
-          type: 'AeroSport 200',
+        const ac1 = {
+          id: 'Pacific Air 204',
+          type: 'A320neo Airliner',
+          model: 'airliner',
           mesh: a1Mesh,
-          state: 'APPROACH',
-          pos: new THREE.Vector3(0, 185, 3600), // Intercepting 3-deg ILS at 3.6km out
+          collisionRadius: (a1Mesh.userData && a1Mesh.userData.collisionRadius) || 16.0,
+          state: 'AIRLINER_APPROACH',
+          pos: new THREE.Vector3(0, 195, 3800),
           rotY: 0,
-          speed: 35.0, // ~68 kts approach speed
-          pitch: -0.05,
-          bank: 0.0,
-          timer: 0,
-          smokeTimer: 0
-        });
-
-        // 2. Alpha 18 (Single-Prop Trainer - Racing Crimson: Hold Short A1 & Runway 36 Departure)
-        const a2Mesh = createAIAircraftMesh(0xdc2626, 0x1e293b, 'prop');
-        scene.add(a2Mesh);
-        this.aircraft.push({
-          id: 'Alpha 18',
-          type: 'AeroSport 200',
-          mesh: a2Mesh,
-          state: 'HOLD_SHORT',
-          pos: new THREE.Vector3(35, 0.76, 1160),
-          rotY: Math.PI / 2,
-          speed: 0.0,
-          pitch: 0.0,
-          bank: 0.0,
-          timer: 0
-        });
-
-        // 3. Bravo 07 (Single-Prop - Sunburst Amber: Holding short queued behind A1)
-        const a3Mesh = createAIAircraftMesh(0xf59e0b, 0x0f172a, 'prop');
-        scene.add(a3Mesh);
-        this.aircraft.push({
-          id: 'Bravo 07',
-          type: 'AeroSport 200',
-          mesh: a3Mesh,
-          state: 'HOLD_SHORT_QUEUE',
-          pos: new THREE.Vector3(58, 0.76, 1160),
-          rotY: Math.PI / 2,
-          speed: 0.0,
-          pitch: 0.0,
-          bank: 0.0,
-          timer: 0
-        });
-
-        // 4. Sierra 09 (Single-Prop Trainer - Royal Navy/Gold: GA Apron -> Taxi Alpha -> RWY 36 Departure)
-        const a4Mesh = createAIAircraftMesh(0x1e3a8a, 0xd97706, 'prop');
-        scene.add(a4Mesh);
-        this.aircraft.push({
-          id: 'Sierra 09',
-          type: 'AeroSport 200',
-          mesh: a4Mesh,
-          state: 'PARKED',
-          pos: new THREE.Vector3(165, 0.76, -30), // Parked on GA Apron Stand 3
-          rotY: -Math.PI / 2,
-          speed: 0.0,
-          pitch: 0.0,
-          bank: 0.0,
-          timer: 0
-        });
-
-        // 5. Delta 88 (Single-Prop Trainer - Pearl White/Crimson: ILS Final -> Landing -> Gate 2)
-        const a5Mesh = createAIAircraftMesh(0xf8fafc, 0xbe123c, 'prop');
-        scene.add(a5Mesh);
-        this.aircraft.push({
-          id: 'Delta 88',
-          type: 'AeroSport 200',
-          mesh: a5Mesh,
-          state: 'JET_APPROACH',
-          pos: new THREE.Vector3(0, 240, 4600), // Intercepting 3-deg ILS at 4.6km out
-          rotY: 0,
-          speed: 38.0,
+          speed: 36.0,
           pitch: -0.052,
           bank: 0.0,
           timer: 0,
-          smokeTimer: 0
-        });
+          isDestroyed: false
+        };
 
-        // 6. Charlie 55 (Emerald Green - Traffic Circuit: Downwind -> Base -> Final -> Touch-and-Go)
-        const a6Mesh = createAIAircraftMesh(0x16a34a, 0xf1f5f9, 'prop');
-        scene.add(a6Mesh);
-        this.aircraft.push({
-          id: 'Charlie 55',
-          type: 'AeroSport 200',
-          mesh: a6Mesh,
-          state: 'DOWNWIND',
-          pos: new THREE.Vector3(-680, 310, 200),
+        // 2. Viper 01: F/A-18 Strike Fighter (Gunship Slate / Aggressor Amber)
+        const a2Mesh = createAIAircraftMesh(0x334155, 0xf59e0b, 'fighter');
+        scene.add(a2Mesh);
+        const ac2 = {
+          id: 'Viper 01',
+          type: 'F/A-18 Strike Fighter',
+          model: 'fighter',
+          mesh: a2Mesh,
+          collisionRadius: (a2Mesh.userData && a2Mesh.userData.collisionRadius) || 8.5,
+          state: 'FIGHTER_DOWNWIND',
+          pos: new THREE.Vector3(-650, 280, -200),
+          rotY: Math.PI,
+          speed: 68.0,
+          pitch: 0.0,
+          bank: 0.0,
+          timer: 0,
+          isDestroyed: false
+        };
+
+        // 3. Delta 88: B737-800 Passenger Airliner (Platinum Silver / Crimson Flag)
+        const a3Mesh = createAIAircraftMesh(0xe2e8f0, 0x991b1b, 'airliner');
+        scene.add(a3Mesh);
+        const ac3 = {
+          id: 'Delta 88',
+          type: 'B737-800 Airliner',
+          model: 'airliner',
+          mesh: a3Mesh,
+          collisionRadius: (a3Mesh.userData && a3Mesh.userData.collisionRadius) || 16.0,
+          state: 'AIRLINER_PARKED_GATE2',
+          pos: new THREE.Vector3(155, 0.76, -95),
+          rotY: Math.PI / 2,
+          speed: 0.0,
+          pitch: 0.0,
+          bank: 0.0,
+          timer: 0,
+          isDestroyed: false
+        };
+
+        // 4. Alpha 18: F-15C Interceptor Fighter (Desert Aggressor Ochre / Dark Charcoal)
+        const a4Mesh = createAIAircraftMesh(0xd97706, 0x1e293b, 'fighter');
+        scene.add(a4Mesh);
+        const ac4 = {
+          id: 'Alpha 18',
+          type: 'F-15C Interceptor',
+          model: 'fighter',
+          mesh: a4Mesh,
+          collisionRadius: (a4Mesh.userData && a4Mesh.userData.collisionRadius) || 8.5,
+          state: 'INTERCEPTOR_HOLD_SHORT',
+          pos: new THREE.Vector3(48, 0.76, 1160),
+          rotY: Math.PI / 2,
+          speed: 0.0,
+          pitch: 0.0,
+          bank: 0.0,
+          timer: 0,
+          isDestroyed: false
+        };
+
+        // 5. SkyLine 42: Cirrus SR22 Sport (Cobalt Blue / White)
+        const a5Mesh = createAIAircraftMesh(0x0284c7, 0xf8fafc, 'prop');
+        scene.add(a5Mesh);
+        const ac5 = {
+          id: 'SkyLine 42',
+          type: 'Cirrus SR22 Sport',
+          model: 'prop',
+          mesh: a5Mesh,
+          collisionRadius: (a5Mesh.userData && a5Mesh.userData.collisionRadius) || 6.0,
+          state: 'VFR_DOWNWIND',
+          pos: new THREE.Vector3(-680, 310, 400),
           rotY: Math.PI,
           speed: 36.0,
           pitch: 0.0,
           bank: 0.0,
-          timer: 0
-        });
+          timer: 0,
+          isDestroyed: false
+        };
+
+        // 6. Sierra 09: King Air 350 Twin Turboprop (Royal Navy Blue / Aviation Gold)
+        const a6Mesh = createAIAircraftMesh(0x1e3a8a, 0xd97706, 'twin');
+        scene.add(a6Mesh);
+        const ac6 = {
+          id: 'Sierra 09',
+          type: 'King Air 350 Twin',
+          model: 'twin',
+          mesh: a6Mesh,
+          collisionRadius: (a6Mesh.userData && a6Mesh.userData.collisionRadius) || 9.0,
+          state: 'TWIN_PARKED_APRON',
+          pos: new THREE.Vector3(165, 0.76, -30),
+          rotY: -Math.PI / 2,
+          speed: 0.0,
+          pitch: 0.0,
+          bank: 0.0,
+          timer: 0,
+          isDestroyed: false
+        };
+
+        this.aircraft = [ac1, ac2, ac3, ac4, ac5, ac6];
 
         this.aircraft.forEach(ac => {
+          ac.initialConfig = {
+            pos: ac.pos.clone(),
+            rotY: ac.rotY,
+            pitch: ac.pitch,
+            bank: ac.bank,
+            speed: ac.speed,
+            state: ac.state
+          };
+
+          ac.triggerDestruction = function(blastOrigin = null) {
+            if (this.isDestroyed) return;
+            this.isDestroyed = true;
+            this.state = 'CRASHED_TUMBLING';
+            this.timer = 0;
+            this._hitGroundExplosion = false;
+
+            let imp = new THREE.Vector3((Math.random() - 0.5) * 16, 14 + Math.random() * 12, (Math.random() - 0.5) * 16);
+            if (blastOrigin) {
+              const bPos = (blastOrigin instanceof THREE.Vector3) ? blastOrigin : new THREE.Vector3(blastOrigin.x, blastOrigin.y, blastOrigin.z);
+              const blastDir = this.pos.clone().sub(bPos);
+              if (blastDir.lengthSq() > 0.01) {
+                blastDir.normalize();
+                imp.addScaledVector(blastDir, 28.0);
+                imp.y = Math.max(12.0, imp.y);
+              }
+            }
+            this.tumbleVel = imp;
+            this.crashVel = imp;
+            this.tumbleAngVel = new THREE.Vector3((Math.random() - 0.5) * 7.0, (Math.random() - 0.5) * 7.0, (Math.random() - 0.5) * 7.0);
+            this.crashRotVel = this.tumbleAngVel;
+
+            if (typeof triggerFireballExplosion === 'function') {
+              triggerFireballExplosion(this.pos, new THREE.Vector3(0, 2.5, 0));
+            }
+            if (typeof soundSystem !== 'undefined' && soundSystem && soundSystem.playCrashSound) {
+              soundSystem.playCrashSound();
+            }
+            const logATC = (window.atcSystem && window.atcSystem.log) ? window.atcSystem.log.bind(window.atcSystem) : (typeof atcSystem !== 'undefined' && atcSystem.log ? atcSystem.log.bind(atcSystem) : null);
+            if (logATC) {
+              logATC('TOWER', `MAYDAY! ${this.id.toUpperCase()} SUSTAINED CATASTROPHIC IMPACT - AIRFRAME COMPROMISED!`, 'alert');
+            }
+          };
+
+          ac.resetToInitial = function() {
+            this.isDestroyed = false;
+            this.pos.copy(this.initialConfig.pos);
+            this.rotY = this.initialConfig.rotY;
+            this.pitch = this.initialConfig.pitch;
+            this.bank = this.initialConfig.bank;
+            this.speed = this.initialConfig.speed;
+            this.state = this.initialConfig.state;
+            this.timer = 0;
+            this.tumbleVel = null;
+            this.crashVel = null;
+            this.tumbleAngVel = null;
+            this.crashRotVel = null;
+            this._hitGroundExplosion = false;
+            if (this.mesh) {
+              this.mesh.visible = true;
+              this.mesh.position.copy(this.pos);
+              this.mesh.rotation.set(this.pitch, this.rotY, this.bank, 'YXZ');
+            }
+          };
+
           if (window.frustumCuller && ac.mesh) {
-            window.frustumCuller.register(ac.mesh, `AI Aircraft (${ac.id})`, 25);
+            window.frustumCuller.register(ac.mesh, `AI Aircraft (${ac.id})`, 35);
+          }
+        });
+      }
+
+      reset() {
+        if (!this.aircraft) return;
+        this.aircraft.forEach(ac => {
+          if (typeof ac.resetToInitial === 'function') {
+            ac.resetToInitial();
           }
         });
       }
 
       update(dt) {
+        if (!this.aircraft || this.aircraft.length === 0) return;
         const time = performance.now() * 0.001;
+        const logATC = (window.atcSystem && window.atcSystem.log) ? window.atcSystem.log.bind(window.atcSystem) : (typeof atcSystem !== 'undefined' && atcSystem.log ? atcSystem.log.bind(atcSystem) : () => {});
 
-        this.aircraft.forEach(ac => {
-          // Spin propellers for prop & twin aircraft
-          if (ac.mesh.userData.props) {
-            ac.mesh.userData.props.forEach(p => p.rotation.z += 44.0 * dt);
-          }
-          // Flash anti-collision beacons
-          if (ac.mesh.userData.beacon) {
-            ac.mesh.userData.beacon.material.opacity = (Math.sin(time * 6.5) > 0.5) ? 1.0 : 0.15;
-            ac.mesh.userData.beacon.material.transparent = true;
+        for (let i = 0; i < this.aircraft.length; i++) {
+          const ac = this.aircraft[i];
+
+          // 1. Sub-element visual animations
+          if (ac.mesh && ac.mesh.userData) {
+            if (ac.mesh.userData.fans) {
+              ac.mesh.userData.fans.forEach(f => f.rotation.z += 35.0 * dt);
+            }
+            if (ac.mesh.userData.props) {
+              ac.mesh.userData.props.forEach(p => p.rotation.z += 48.0 * dt);
+            }
+            if (ac.mesh.userData.beacons) {
+              const beaconLit = (Math.sin(time * 6.5) > 0.4);
+              ac.mesh.userData.beacons.forEach(b => {
+                b.material.opacity = beaconLit ? 1.0 : 0.15;
+                b.material.transparent = true;
+              });
+            }
+            if (ac.mesh.userData.afterburners) {
+              const isAfterburnerActive = (
+                ac.state === 'FIGHTER_AFTERBURNER_LAUNCH' ||
+                ac.state === 'FIGHTER_PULLUP_CLIMB' ||
+                ac.state === 'INTERCEPTOR_SCRAMBLE_ROLL' ||
+                ac.state === 'INTERCEPTOR_HIGH_CLIMB'
+              );
+              ac.mesh.userData.afterburners.forEach(flame => {
+                flame.visible = isAfterburnerActive;
+                if (isAfterburnerActive) {
+                  const pulse = 0.95 + Math.sin(time * 28.0) * 0.22;
+                  flame.scale.set(pulse, 1.0 + Math.sin(time * 20.0) * 0.3, pulse);
+                  flame.material.opacity = 0.8 + Math.sin(time * 16.0) * 0.18;
+                }
+              });
+            }
           }
 
           ac.timer += dt;
 
-          // Crash Tumbling Physics
-          if (ac.state === 'CRASHED_TUMBLING') {
-            if (ac.tumbleVel) {
-              ac.pos.addScaledVector(ac.tumbleVel, dt);
-              ac.tumbleVel.y -= 9.81 * dt;
+          // 2. Universal Crash Tumbling & Secondary Blast Physics
+          if (ac.state === 'CRASHED_TUMBLING' || ac.isDestroyed) {
+            const vel = ac.tumbleVel || ac.crashVel;
+            if (vel) {
+              ac.pos.addScaledVector(vel, dt);
+              vel.y -= 9.81 * dt;
+              vel.x *= Math.max(0, 1.0 - 0.18 * dt);
+              vel.z *= Math.max(0, 1.0 - 0.18 * dt);
             }
-            if (ac.tumbleAngVel && ac.mesh) {
-              ac.mesh.rotation.x += ac.tumbleAngVel.x * dt;
-              ac.mesh.rotation.y += ac.tumbleAngVel.y * dt;
-              ac.mesh.rotation.z += ac.tumbleAngVel.z * dt;
+            const rotVel = ac.tumbleAngVel || ac.crashRotVel;
+            if (rotVel && ac.mesh) {
+              ac.mesh.rotation.x += rotVel.x * dt;
+              ac.mesh.rotation.y += rotVel.y * dt;
+              ac.mesh.rotation.z += rotVel.z * dt;
             }
-            if (ac.pos.y <= 0.76) {
-              ac.pos.y = 0.76;
-              if (ac.tumbleVel) ac.tumbleVel.set(0, 0, 0);
+            const elev = (typeof getTerrainElevationAt === 'function') ? getTerrainElevationAt(ac.pos.x, ac.pos.z) : 0.76;
+            const groundFloor = Math.max(0.76, elev);
+            if (ac.pos.y <= groundFloor) {
+              ac.pos.y = groundFloor;
+              if (vel) vel.set(0, 0, 0);
+              if (rotVel) rotVel.multiplyScalar(Math.max(0, 1.0 - 6.0 * dt));
+              if (!ac._hitGroundExplosion) {
+                ac._hitGroundExplosion = true;
+                if (typeof triggerFireballExplosion === 'function') {
+                  triggerFireballExplosion(ac.pos, new THREE.Vector3(0, 1.8, 0));
+                }
+                if (typeof soundSystem !== 'undefined' && soundSystem && soundSystem.playCrashSound) {
+                  soundSystem.playCrashSound();
+                }
+              }
             }
-            if (typeof spawnTireSmoke === 'function' && Math.random() < 0.25) {
-              spawnTireSmoke(ac.pos, new THREE.Vector3(0, 1.2, 0), 5);
+            if (typeof spawnTireSmoke === 'function' && Math.random() < 0.35) {
+              spawnTireSmoke(ac.pos, new THREE.Vector3((Math.random() - 0.5) * 1.5, 2.0, (Math.random() - 0.5) * 1.5), 4);
             }
-            return;
+            if (ac.mesh) ac.mesh.position.copy(ac.pos);
+
+            // Auto-respawn after resting destroyed for 50 seconds
+            if (ac.timer > 50.0) {
+              ac.resetToInitial();
+            }
+            continue;
           }
 
           // ===========================================================
-          // AC 1: SkyLine 42 (Precision 3-deg ILS Landing -> Vacate A3 -> Taxi Alpha -> Stand 1)
+          // AC 1: Pacific Air 204 (A320neo Airliner - Closed Circuit)
           // ===========================================================
-          if (ac.id === 'SkyLine 42') {
-            if (ac.state === 'APPROACH') {
+          if (ac.id === 'Pacific Air 204') {
+            if (ac.state === 'AIRLINER_APPROACH') {
               if (ac.pos.z < 2200 && ac.pos.z > 500) {
-                const rw = checkRunwayOccupied('SkyLine 42');
+                const rw = checkRunwayOccupied('Pacific Air 204');
                 if (rw.occupied) {
-                  ac.state = 'GO_AROUND';
+                  ac.state = 'AIRLINER_GO_AROUND';
                   ac.timer = 0;
-                  atcSystem.log('SkyLine 42', `Going around! Runway 36 occupied by ${rw.by}.`, 'pilot');
-                  setTimeout(() => {
-                    atcSystem.log('Tower', 'SkyLine 42, roger go-around, climb and maintain 1,500 ft, fly runway heading.', 'tower');
-                  }, 1200);
+                  logATC('Pacific Air 204', `Going around! Runway 36 occupied by ${rw.by}.`, 'pilot');
                   return;
                 }
               }
+              const locHeading = getLocalizerHeading(ac.pos.x, 0.15);
+              updateAIAircraftOrientation(ac, dt, locHeading, -0.052);
+              ac.pos.x += Math.sin(ac.rotY) * ac.speed * dt;
+              ac.pos.z -= Math.cos(ac.rotY) * ac.speed * dt;
+              const glideslopeY = 0.76 + Math.max(0, ac.pos.z - 1000) * 0.0524;
+              const gsError = ac.pos.y - glideslopeY;
+              const sinkRate = (ac.speed * 0.0524) + THREE.MathUtils.clamp(gsError * 0.6, -1.5, 4.0);
+              ac.pos.y = Math.max(0.76, ac.pos.y - sinkRate * dt);
+              if (Math.abs(ac.pos.x) < 0.25) ac.pos.x = 0;
 
-              ac.pos.z -= ac.speed * dt;
-              ac.pos.y = Math.max(0.76, ac.pos.y - (ac.speed * 0.0524) * dt);
-              updateAIAircraftOrientation(ac, dt, 0, -0.052);
-
-              if (ac.pos.z <= 2800 && ac.pos.z >= 2700 && !ac._landingCleared) {
-                ac._landingCleared = true;
-                atcSystem.log('Tower', 'SkyLine 42, 2-mile final, wind 340 at 8 kts, Runway 36 CLEARED TO LAND.', 'tower');
+              if (ac.pos.z <= 2800 && ac.pos.z >= 2700 && !ac._clearedLand) {
+                ac._clearedLand = true;
+                logATC('Tower', 'Pacific Air 204, wind 340 at 8 kts, Runway 36 CLEARED TO LAND.', 'tower');
               }
-
-              if (ac.pos.y <= 12.8 && ac.pos.z <= 1060) {
-                ac.state = 'FLARE';
+              if (ac.pos.y <= 12.5 && ac.pos.z <= 1080) {
+                ac.state = 'AIRLINER_FLARE';
                 ac.timer = 0;
               }
-            } else if (ac.state === 'FLARE') {
+            } else if (ac.state === 'AIRLINER_FLARE') {
               ac.pos.z -= ac.speed * dt;
-              ac.speed = Math.max(28.0, ac.speed - 2.5 * dt);
-              ac.pos.y = Math.max(0.76, ac.pos.y - Math.max(0.35, (ac.pos.y - 0.76) * 1.8) * dt);
-              updateAIAircraftOrientation(ac, dt, 0, 0.084);
-
-              if (ac.pos.y <= 0.78 && ac.pos.z <= 940) {
-                ac.state = 'TOUCHDOWN';
+              ac.speed = Math.max(27.0, ac.speed - 2.8 * dt);
+              ac.pos.y = Math.max(0.76, ac.pos.y - Math.max(0.35, (ac.pos.y - 0.76) * 1.6) * dt);
+              updateAIAircraftOrientation(ac, dt, 0, 0.087);
+              if (ac.pos.y <= 0.78 && ac.pos.z <= 960) {
+                ac.state = 'AIRLINER_TOUCHDOWN';
                 ac.pos.y = 0.76;
                 ac.timer = 0;
                 if (typeof spawnTireSmoke === 'function') {
-                  spawnTireSmoke(new THREE.Vector3(ac.pos.x, 0.02, ac.pos.z), new THREE.Vector3(0, -1.2, -ac.speed), 10);
+                  spawnTireSmoke(new THREE.Vector3(ac.pos.x, 0.02, ac.pos.z), new THREE.Vector3(0, -1.2, -ac.speed), 14);
                 }
-                atcSystem.log('SkyLine 42', 'Touchdown Runway 36, speed 58 kts, braking.', 'pilot');
+                logATC('Pacific Air 204', 'Touchdown Runway 36, reverse thrust deployed, braking.', 'pilot');
               }
-            } else if (ac.state === 'TOUCHDOWN') {
+            } else if (ac.state === 'AIRLINER_TOUCHDOWN') {
               ac.pos.z -= ac.speed * dt;
-              ac.speed = Math.max(5.5, ac.speed - 3.4 * dt);
+              ac.speed = Math.max(7.5, ac.speed - 3.8 * dt);
               updateAIAircraftOrientation(ac, dt, 0, 0.0);
-
               if (ac.pos.z <= 220 && ac.speed <= 8.5) {
-                ac.state = 'VACATING_A3';
+                ac.state = 'AIRLINER_VACATE_A3';
                 ac.timer = 0;
-                atcSystem.log('SkyLine 42', 'Vacating Runway 36 via Taxiway A3.', 'pilot');
-                setTimeout(() => {
-                  atcSystem.log('Tower', 'SkyLine 42, ground on 121.9, taxi to General Aviation Apron Stand 1 via Alpha.', 'tower');
-                }, 1100);
+                logATC('Pacific Air 204', 'Vacating Runway 36 via Taxiway A3 to Terminal Gate 1.', 'pilot');
               }
-            } else if (ac.state === 'VACATING_A3') {
+            } else if (ac.state === 'AIRLINER_VACATE_A3') {
               ac.pos.x += ac.speed * dt;
               updateAITaxiOrientation(ac, dt, Math.PI / 2);
-
               if (ac.pos.x >= 99.5) {
                 ac.pos.x = 100;
-                ac.state = 'TAXI_ALPHA_NORTH';
+                ac.state = 'AIRLINER_TAXI_ALPHA_NORTH';
                 ac.timer = 0;
-                atcSystem.log('SkyLine 42', 'Taxiing north along Taxiway Alpha to Apron Stand 1.', 'pilot');
               }
-            } else if (ac.state === 'TAXI_ALPHA_NORTH') {
-              ac.speed = 4.2;
+            } else if (ac.state === 'AIRLINER_TAXI_ALPHA_NORTH') {
+              ac.speed = 5.2;
               ac.pos.z -= ac.speed * dt;
               updateAITaxiOrientation(ac, dt, 0);
-
               if (ac.pos.z <= -160) {
                 ac.pos.z = -160;
-                ac.state = 'TURN_TO_APRON_STAND';
+                ac.state = 'AIRLINER_TURN_GATE1';
                 ac.timer = 0;
               }
-            } else if (ac.state === 'TURN_TO_APRON_STAND') {
-              ac.speed = 3.0;
+            } else if (ac.state === 'AIRLINER_TURN_GATE1') {
+              ac.speed = 3.2;
               ac.pos.x += ac.speed * dt;
               updateAITaxiOrientation(ac, dt, Math.PI / 2);
-
               if (ac.pos.x >= 165) {
                 ac.pos.x = 165;
                 ac.speed = 0.0;
-                ac.state = 'PARKED_STAND';
+                ac.state = 'AIRLINER_PARKED_GATE1';
                 ac.timer = 0;
-                atcSystem.log('SkyLine 42', 'Parked at Remote Stand 1, engine shutdown.', 'pilot');
+                logATC('Pacific Air 204', 'Parked at Terminal Gate 1, jetway docked.', 'pilot');
               }
-            } else if (ac.state === 'PARKED_STAND') {
-              if (ac.timer > 35.0) {
-                ac.pos.set(0, 185, 3600);
-                ac.rotY = 0;
-                ac.speed = 35.0;
-                ac.pitch = -0.05;
-                ac.bank = 0.0;
-                ac.state = 'APPROACH';
-                ac.timer = 0;
-                ac._landingCleared = false;
-              }
-            } else if (ac.state === 'GO_AROUND') {
-              ac.speed = 40.0;
-              ac.pos.z -= ac.speed * dt;
-              ac.pos.y = Math.min(320.0, ac.pos.y + 6.0 * dt);
-              updateAIAircraftOrientation(ac, dt, 0, 0.12);
-              if (ac.pos.z <= -1600) ac.state = 'APPROACH';
-            }
-          }
-
-          // ===========================================================
-          // AC 2: Alpha 18 (Hold Short A1 -> Lineup Runway 36 Centerline -> Takeoff Roll)
-          // ===========================================================
-          if (ac.id === 'Alpha 18') {
-            if (ac.state === 'HOLD_SHORT') {
-              ac.speed = 0.0;
+            } else if (ac.state === 'AIRLINER_PARKED_GATE1') {
               updateAITaxiOrientation(ac, dt, Math.PI / 2);
-              if (ac.timer > 5.0) {
-                const rw = checkRunwayOccupied('Alpha 18');
-                if (!rw.occupied) {
-                  ac.state = 'TAXI_TO_LINEUP';
-                  ac.timer = 0;
-                  atcSystem.log('Tower', 'Alpha 18, wind 340 at 8 kts, Runway 36 CLEARED FOR TAKEOFF!', 'tower');
-                }
-              }
-            } else if (ac.state === 'TAXI_TO_LINEUP') {
-              ac.speed = 3.6;
-              ac.pos.x -= ac.speed * dt;
-              const turnProgress = Math.max(0, Math.min(1, (35 - ac.pos.x) / 35));
-              const targetHead = Math.PI / 2 - turnProgress * (Math.PI / 2);
-              updateAITaxiOrientation(ac, dt, targetHead, 1.2);
-
-              if (ac.pos.x <= 0.2) {
-                ac.pos.x = 0.0;
-                ac.rotY = 0.0;
-                ac.state = 'LINED_UP_ON_CENTERLINE';
-                ac.timer = 0;
-                atcSystem.log('Alpha 18', 'Lined up Runway 36 centerline, rolling.', 'pilot');
-              }
-            } else if (ac.state === 'LINED_UP_ON_CENTERLINE') {
-              if (ac.timer > 0.8) {
-                ac.state = 'TAKEOFF_ROLL';
-                ac.speed = 8.0;
-              }
-            } else if (ac.state === 'TAKEOFF_ROLL') {
-              ac.speed = Math.min(48.0, ac.speed + 4.2 * dt);
-              ac.pos.z -= ac.speed * dt;
-              updateAIAircraftOrientation(ac, dt, 0, 0.0);
-
-              if (ac.speed >= 38.0) {
-                ac.state = 'ROTATION';
-                atcSystem.log('Alpha 18', 'Rotate, positive rate, gear up.', 'pilot');
-              }
-            } else if (ac.state === 'ROTATION') {
-              ac.speed = Math.min(48.0, ac.speed + 3.0 * dt);
-              ac.pos.z -= ac.speed * dt;
-              ac.pos.y += 2.8 * dt;
-              updateAIAircraftOrientation(ac, dt, 0, 0.09);
-
-              if (ac.pos.y >= 8.0) {
-                ac.state = 'CLIMB_OUT';
-              }
-            } else if (ac.state === 'CLIMB_OUT') {
-              ac.speed = 42.0;
-              ac.pos.z -= ac.speed * dt;
-              ac.pos.y += 5.5 * dt;
-              updateAIAircraftOrientation(ac, dt, 0, 0.12);
-
-              if (ac.pos.z <= -1600) {
-                ac.state = 'CROSSWIND_TURN';
-                atcSystem.log('Alpha 18', 'Turning left crosswind, climbing 2,000 ft.', 'pilot');
-              }
-            } else if (ac.state === 'CROSSWIND_TURN') {
-              ac.pos.x -= ac.speed * dt;
-              ac.pos.y = Math.min(320.0, ac.pos.y + 2.5 * dt);
-              updateAIAircraftOrientation(ac, dt, -Math.PI / 2, 0.04);
-
-              if (ac.pos.x <= -700) {
-                ac.state = 'RESET';
-                ac.timer = 0;
-              }
-            } else if (ac.state === 'RESET') {
-              if (ac.timer > 15.0) {
-                ac.pos.set(35, 0.76, 1160);
-                ac.rotY = Math.PI / 2;
-                ac.speed = 0.0;
-                ac.pitch = 0.0;
-                ac.bank = 0.0;
-                ac.state = 'HOLD_SHORT';
-                ac.timer = 0;
-              }
-            }
-          }
-
-          // ===========================================================
-          // AC 3: Bravo 07 (Queued at A1 -> Advances to Hold Short)
-          // ===========================================================
-          if (ac.id === 'Bravo 07') {
-            if (ac.state === 'HOLD_SHORT_QUEUE') {
-              const leadAc = this.aircraft.find(a => a.id === 'Alpha 18');
-              if (leadAc && (leadAc.pos.x < 15 || leadAc.state === 'TAKEOFF_ROLL' || leadAc.state === 'CLIMB_OUT')) {
-                ac.state = 'ADVANCING_TO_SLOT_1';
-                atcSystem.log('Bravo 07', 'Advancing to hold short line Runway 36 at Taxiway A1.', 'pilot');
-              }
-            } else if (ac.state === 'ADVANCING_TO_SLOT_1') {
-              ac.speed = 3.2;
-              ac.pos.x = Math.max(35, ac.pos.x - ac.speed * dt);
-              ac.pos.z = 1160;
-              updateAITaxiOrientation(ac, dt, Math.PI / 2);
-
-              if (ac.pos.x <= 35.1) {
-                ac.pos.x = 35;
-                ac.speed = 0.0;
-                ac.state = 'HOLD_SHORT_ACTIVE';
-                ac.timer = 0;
-                atcSystem.log('Bravo 07', 'Holding short Runway 36 at Taxiway A1, number one.', 'pilot');
-              }
-            } else if (ac.state === 'HOLD_SHORT_ACTIVE') {
-              if (ac.timer > 22.0) {
-                ac.pos.set(58, 0.76, 1160);
-                ac.rotY = Math.PI / 2;
-                ac.state = 'HOLD_SHORT_QUEUE';
-                ac.timer = 0;
-              }
-            }
-          }
-
-          // ===========================================================
-          // AC 4: Sierra 09 (Single-Prop Trainer: GA Apron -> Taxi Alpha -> Departure)
-          // ===========================================================
-          if (ac.id === 'Sierra 09') {
-            if (ac.state === 'PARKED') {
-              ac.mesh.position.copy(ac.pos);
-              ac.mesh.rotation.set(0, ac.rotY, 0);
               if (ac.timer > 18.0) {
+                ac.state = 'AIRLINER_PUSHBACK_GATE1';
                 ac.timer = 0;
-                atcSystem.log('Sierra 09', 'Ground, Sierra 09 on Stand 3, request taxi to Runway 36.', 'pilot');
-                setTimeout(() => {
-                  atcSystem.log('Tower', 'Sierra 09, taxi to Runway 36 via Taxiway Alpha, hold short at A1.', 'tower');
-                }, 1000);
-                ac.state = 'TAXI_OUT_APRON';
+                logATC('Tower', 'Pacific Air 204, pushback approved onto Taxiway Alpha, face South.', 'tower');
               }
-            } else if (ac.state === 'TAXI_OUT_APRON') {
-              ac.speed = 3.5;
+            } else if (ac.state === 'AIRLINER_PUSHBACK_GATE1') {
+              ac.speed = 2.4;
               ac.pos.x = Math.max(100, ac.pos.x - ac.speed * dt);
-              updateAITaxiOrientation(ac, dt, -Math.PI / 2);
-              if (ac.pos.x <= 100.1) {
+              const pushProg = (165 - ac.pos.x) / 65;
+              updateAITaxiOrientation(ac, dt, Math.PI / 2 + pushProg * (Math.PI / 2));
+              if (ac.pos.x <= 100.2) {
                 ac.pos.x = 100;
-                ac.state = 'TAXI_ALPHA_SOUTH';
+                ac.rotY = Math.PI;
+                ac.state = 'AIRLINER_TAXI_ALPHA_SOUTH';
                 ac.timer = 0;
-                atcSystem.log('Sierra 09', 'Taxiing south on Taxiway Alpha.', 'pilot');
+                logATC('Pacific Air 204', 'Pushback complete, taxiing to Runway 36 holding point A1.', 'pilot');
               }
-            } else if (ac.state === 'TAXI_ALPHA_SOUTH') {
-              ac.speed = 5.2;
+            } else if (ac.state === 'AIRLINER_TAXI_ALPHA_SOUTH') {
+              ac.speed = 5.5;
               ac.pos.z += ac.speed * dt;
               updateAITaxiOrientation(ac, dt, Math.PI);
-              if (ac.pos.z >= 1150) {
-                ac.pos.z = 1150;
-                ac.state = 'HOLD_SHORT_A1';
+              if (ac.pos.z >= 1140) {
+                ac.pos.z = 1140;
+                ac.state = 'AIRLINER_HOLD_SHORT_A1';
                 ac.timer = 0;
-                atcSystem.log('Sierra 09', 'Holding short Runway 36 at Taxiway A1.', 'pilot');
               }
-            } else if (ac.state === 'HOLD_SHORT_A1') {
-              if (ac.timer > 12.0) {
-                const rw = checkRunwayOccupied('Sierra 09');
+            } else if (ac.state === 'AIRLINER_HOLD_SHORT_A1') {
+              ac.pos.x = Math.max(35, ac.pos.x - 3.2 * dt);
+              updateAITaxiOrientation(ac, dt, -Math.PI / 2);
+              if (ac.pos.x <= 35.2 && ac.timer > 6.0) {
+                const rw = checkRunwayOccupied('Pacific Air 204');
                 if (!rw.occupied) {
-                  ac.state = 'LINEUP_RWY36';
-                  atcSystem.log('Tower', 'Sierra 09, wind 340 at 8 kts, Runway 36 CLEARED FOR TAKEOFF!', 'tower');
+                  ac.state = 'AIRLINER_LINEUP';
+                  ac.timer = 0;
                 }
               }
-            } else if (ac.state === 'LINEUP_RWY36') {
-              ac.speed = 4.0;
-              ac.pos.x = Math.max(0, ac.pos.x - ac.speed * dt);
-              const turnProg = (100 - ac.pos.x) / 100;
+            } else if (ac.state === 'AIRLINER_LINEUP') {
+              ac.pos.x = Math.max(0, ac.pos.x - 3.4 * dt);
+              const turnProg = (35 - ac.pos.x) / 35;
               updateAITaxiOrientation(ac, dt, -Math.PI / 2 + turnProg * (Math.PI / 2));
               if (ac.pos.x <= 0.2) {
                 ac.pos.x = 0;
                 ac.rotY = 0;
-                ac.state = 'TWIN_TAKEOFF_ROLL';
-                ac.speed = 10.0;
-                atcSystem.log('Sierra 09', 'Full power, rolling Runway 36.', 'pilot');
-              }
-            } else if (ac.state === 'TWIN_TAKEOFF_ROLL') {
-              ac.speed = Math.min(55.0, ac.speed + 5.0 * dt);
-              ac.pos.z -= ac.speed * dt;
-              updateAIAircraftOrientation(ac, dt, 0, 0);
-              if (ac.speed >= 44.0) {
-                ac.state = 'TWIN_CLIMB';
-                atcSystem.log('Sierra 09', 'Rotate, positive climb rate.', 'pilot');
-              }
-            } else if (ac.state === 'TWIN_CLIMB') {
-              ac.speed = 48.0;
-              ac.pos.z -= ac.speed * dt;
-              ac.pos.y += 6.5 * dt;
-              updateAIAircraftOrientation(ac, dt, 0, 0.14);
-              if (ac.pos.z <= -2000) {
-                ac.pos.set(165, 0.76, -30);
-                ac.rotY = -Math.PI / 2;
-                ac.state = 'PARKED';
+                ac.speed = 6.0;
+                ac.state = 'AIRLINER_TAKEOFF_ROLL';
                 ac.timer = 0;
+                logATC('Tower', 'Pacific Air 204, wind 340 at 8 kts, Runway 36 CLEARED FOR TAKEOFF!', 'tower');
+              }
+            } else if (ac.state === 'AIRLINER_TAKEOFF_ROLL') {
+              ac.speed = Math.min(52.0, ac.speed + 3.8 * dt);
+              ac.pos.z -= ac.speed * dt;
+              updateAIAircraftOrientation(ac, dt, 0, 0.0);
+              if (ac.speed >= 40.0) {
+                ac.state = 'AIRLINER_ROTATION';
+                ac.timer = 0;
+                logATC('Pacific Air 204', 'Rotate, positive climb rate, gear up.', 'pilot');
+              }
+            } else if (ac.state === 'AIRLINER_ROTATION') {
+              ac.speed = Math.min(52.0, ac.speed + 2.5 * dt);
+              ac.pos.z -= ac.speed * dt;
+              ac.pos.y += 3.4 * dt;
+              updateAIAircraftOrientation(ac, dt, 0, 0.09);
+              if (ac.pos.y >= 10.0) ac.state = 'AIRLINER_CLIMBOUT';
+            } else if (ac.state === 'AIRLINER_CLIMBOUT') {
+              ac.speed = 46.0;
+              ac.pos.z -= ac.speed * dt;
+              ac.pos.y = Math.min(340.0, ac.pos.y + 6.2 * dt);
+              updateAIAircraftOrientation(ac, dt, 0, 0.12);
+              if (ac.pos.z <= -1700) {
+                ac.state = 'AIRLINER_CROSSWIND';
+                logATC('Pacific Air 204', 'Turning crosswind, climbing 1,500 ft.', 'pilot');
+              }
+            } else if (ac.state === 'AIRLINER_CROSSWIND') {
+              ac.pos.x -= ac.speed * dt;
+              ac.pos.y = Math.min(420.0, ac.pos.y + 4.0 * dt);
+              updateAIAircraftOrientation(ac, dt, -Math.PI / 2, 0.05);
+              if (ac.pos.x <= -850) ac.state = 'AIRLINER_DOWNWIND';
+            } else if (ac.state === 'AIRLINER_DOWNWIND') {
+              ac.pos.z += ac.speed * dt;
+              ac.pos.y = Math.max(185.0, ac.pos.y - 5.0 * dt);
+              updateAIAircraftOrientation(ac, dt, Math.PI, 0.0);
+              if (ac.pos.z >= 4400) ac.state = 'AIRLINER_BASE';
+            } else if (ac.state === 'AIRLINER_BASE') {
+              updateAIAircraftOrientation(ac, dt, Math.PI / 2, -0.04);
+              ac.pos.x += Math.sin(ac.rotY) * ac.speed * dt;
+              ac.pos.z -= Math.cos(ac.rotY) * ac.speed * dt;
+              ac.pos.y = Math.max(180.0, ac.pos.y - 4.0 * dt);
+              if (ac.pos.x >= -300) ac.state = 'AIRLINER_INTERCEPT_ILS';
+            } else if (ac.state === 'AIRLINER_INTERCEPT_ILS') {
+              const locHeading = getLocalizerHeading(ac.pos.x, 0.40);
+              updateAIAircraftOrientation(ac, dt, locHeading, -0.04);
+              ac.pos.x += Math.sin(ac.rotY) * ac.speed * dt;
+              ac.pos.z -= Math.cos(ac.rotY) * ac.speed * dt;
+              ac.pos.y = Math.max(175.0, ac.pos.y - 4.0 * dt);
+              if (Math.abs(ac.pos.x) <= 4.0 && Math.abs(normalizeAngle(ac.rotY)) <= 0.10) {
+                ac.pos.x = 0;
+                ac.rotY = 0;
+                ac._clearedLand = false;
+                ac.state = 'AIRLINER_APPROACH';
+                logATC('Pacific Air 204', 'Established on ILS Runway 36, glideslope captured.', 'pilot');
+              }
+            } else if (ac.state === 'AIRLINER_GO_AROUND') {
+              ac.speed = 46.0;
+              ac.pos.z -= ac.speed * dt;
+              ac.pos.y = Math.min(400.0, ac.pos.y + 8.0 * dt);
+              updateAIAircraftOrientation(ac, dt, 0, 0.14);
+              if (ac.pos.z <= -1700) ac.state = 'AIRLINER_CROSSWIND';
+            }
+          }
+
+          // ===========================================================
+          // AC 2: Viper 01 (F/A-18 Tactical Fighter - High-G Break Circuit)
+          // ===========================================================
+          if (ac.id === 'Viper 01') {
+            if (ac.state === 'FIGHTER_DOWNWIND') {
+              ac.pos.z += ac.speed * dt;
+              ac.pos.y = Math.max(280.0, ac.pos.y - 18.0 * dt);
+              updateAIAircraftOrientation(ac, dt, Math.PI, 0.0, 0.7, 0.5);
+              if (ac.pos.z >= 1600) {
+                ac.state = 'FIGHTER_BASE_TURN';
+                logATC('Viper 01', 'Base turn Runway 36, tactical touch-and-go.', 'pilot');
+              }
+            } else if (ac.state === 'FIGHTER_BASE_TURN') {
+              updateAIAircraftOrientation(ac, dt, Math.PI / 2, -0.06, 0.9, 0.75);
+              ac.pos.x += Math.sin(ac.rotY) * ac.speed * dt;
+              ac.pos.z -= Math.cos(ac.rotY) * ac.speed * dt;
+              ac.pos.y = Math.max(110.0, ac.pos.y - 12.0 * dt);
+              if (ac.pos.x >= -320) ac.state = 'FIGHTER_FINAL_TURN';
+            } else if (ac.state === 'FIGHTER_FINAL_TURN') {
+              const locHeading = getLocalizerHeading(ac.pos.x, 0.45);
+              updateAIAircraftOrientation(ac, dt, locHeading, ac.pos.y < 5.0 ? 0.06 : -0.05, 0.85, 0.65);
+              ac.pos.x += Math.sin(ac.rotY) * ac.speed * dt;
+              ac.pos.z -= Math.cos(ac.rotY) * ac.speed * dt;
+              ac.pos.y = Math.max(0.76, ac.pos.y - 14.0 * dt);
+              if (Math.abs(ac.pos.x) < 0.25) ac.pos.x = 0;
+              if (ac.pos.y <= 0.85 && ac.pos.z <= 940) {
+                ac.pos.x = 0;
+                ac.pos.y = 0.76;
+                ac.rotY = 0;
+                ac.state = 'FIGHTER_TOUCHDOWN';
+                ac.timer = 0;
+                if (typeof spawnTireSmoke === 'function') {
+                  spawnTireSmoke(new THREE.Vector3(ac.pos.x, 0.02, ac.pos.z), new THREE.Vector3(0, -1.2, -ac.speed), 10);
+                }
+                logATC('Tower', 'Viper 01, touch-and-go approved, burner authorized!', 'tower');
+              }
+            } else if (ac.state === 'FIGHTER_TOUCHDOWN') {
+              ac.pos.z -= ac.speed * dt;
+              updateAIAircraftOrientation(ac, dt, 0, 0.0);
+              if (ac.timer > 0.4) {
+                ac.state = 'FIGHTER_AFTERBURNER_LAUNCH';
+                ac.timer = 0;
+                logATC('Viper 01', 'Military burner engaged, rotating!', 'pilot');
+              }
+            } else if (ac.state === 'FIGHTER_AFTERBURNER_LAUNCH') {
+              ac.speed = Math.min(88.0, ac.speed + 24.0 * dt);
+              ac.pos.z -= ac.speed * dt;
+              ac.pos.y += 4.5 * dt;
+              updateAIAircraftOrientation(ac, dt, 0, 0.16);
+              if (ac.speed >= 65.0) ac.state = 'FIGHTER_PULLUP_CLIMB';
+            } else if (ac.state === 'FIGHTER_PULLUP_CLIMB') {
+              ac.speed = Math.min(88.0, ac.speed + 12.0 * dt);
+              ac.pos.z -= ac.speed * dt;
+              ac.pos.y = Math.min(480.0, ac.pos.y + 28.0 * dt);
+              updateAIAircraftOrientation(ac, dt, 0, 0.38);
+              if (ac.pos.z <= -1500) {
+                ac.state = 'FIGHTER_OVERHEAD_BREAK';
+                logATC('Viper 01', 'Overhead break into downwind, pattern altitude.', 'pilot');
+              }
+            } else if (ac.state === 'FIGHTER_OVERHEAD_BREAK') {
+              updateAIAircraftOrientation(ac, dt, -Math.PI, 0.0, 0.95, 0.88);
+              ac.pos.x += Math.sin(ac.rotY) * ac.speed * dt;
+              ac.pos.z -= Math.cos(ac.rotY) * ac.speed * dt;
+              ac.pos.y = Math.max(280.0, ac.pos.y - 18.0 * dt);
+              if (ac.pos.x <= -645 && Math.abs(normalizeAngle(ac.rotY - Math.PI)) <= 0.20) {
+                ac.rotY = Math.PI;
+                ac.speed = 68.0;
+                ac.state = 'FIGHTER_DOWNWIND';
               }
             }
           }
 
           // ===========================================================
-          // AC 5: Delta 88 (Single-Prop Trainer: ILS -> Flare -> Gate 2)
+          // AC 3: Delta 88 (B737-800 Airliner - Terminal Gate 2 Loop)
           // ===========================================================
           if (ac.id === 'Delta 88') {
-            if (ac.state === 'JET_APPROACH') {
-              ac.pos.z -= ac.speed * dt;
-              ac.pos.y = Math.max(0.76, ac.pos.y - (ac.speed * 0.0524) * dt);
-              updateAIAircraftOrientation(ac, dt, 0, -0.052);
-
-              if (ac.pos.z <= 3200 && ac.pos.z >= 3100 && !ac._jetCleared) {
-                ac._jetCleared = true;
-                atcSystem.log('Tower', 'Delta 88, 3-mile final, wind 340 at 8 kts, Runway 36 CLEARED TO LAND.', 'tower');
+            if (ac.state === 'AIRLINER_PARKED_GATE2') {
+              updateAITaxiOrientation(ac, dt, Math.PI / 2);
+              if (ac.timer > 16.0) {
+                ac.state = 'AIRLINER_PUSHBACK_GATE2';
+                ac.timer = 0;
+                logATC('Tower', 'Delta 88, pushback approved from Gate 2 onto Alpha, face South.', 'tower');
               }
-
-              if (ac.pos.y <= 16.0 && ac.pos.z <= 1180) {
-                ac.state = 'JET_FLARE';
+            } else if (ac.state === 'AIRLINER_PUSHBACK_GATE2') {
+              ac.speed = 2.4;
+              ac.pos.x = Math.max(100, ac.pos.x - ac.speed * dt);
+              const pushProg = (155 - ac.pos.x) / 55;
+              updateAITaxiOrientation(ac, dt, Math.PI / 2 + pushProg * (Math.PI / 2));
+              if (ac.pos.x <= 100.2) {
+                ac.pos.x = 100;
+                ac.rotY = Math.PI;
+                ac.state = 'AIRLINER_TAXI_ALPHA_SOUTH_GATE2';
+                ac.timer = 0;
+                logATC('Delta 88', 'Pushback complete, taxiing to Runway 36 via Alpha.', 'pilot');
+              }
+            } else if (ac.state === 'AIRLINER_TAXI_ALPHA_SOUTH_GATE2') {
+              ac.speed = 5.2;
+              ac.pos.z += ac.speed * dt;
+              updateAITaxiOrientation(ac, dt, Math.PI);
+              if (ac.pos.z >= 1140) {
+                ac.pos.z = 1140;
+                ac.state = 'AIRLINER_HOLD_SHORT_A1_GATE2';
                 ac.timer = 0;
               }
-            } else if (ac.state === 'JET_FLARE') {
+            } else if (ac.state === 'AIRLINER_HOLD_SHORT_A1_GATE2') {
+              ac.pos.x = Math.max(36, ac.pos.x - 3.0 * dt);
+              updateAITaxiOrientation(ac, dt, -Math.PI / 2);
+              if (ac.pos.x <= 36.2 && ac.timer > 5.0) {
+                const rw = checkRunwayOccupied('Delta 88');
+                if (!rw.occupied) {
+                  ac.state = 'AIRLINER_LINEUP_GATE2';
+                  ac.timer = 0;
+                }
+              }
+            } else if (ac.state === 'AIRLINER_LINEUP_GATE2') {
+              ac.pos.x = Math.max(0, ac.pos.x - 3.4 * dt);
+              const turnProg = (36 - ac.pos.x) / 36;
+              updateAITaxiOrientation(ac, dt, -Math.PI / 2 + turnProg * (Math.PI / 2));
+              if (ac.pos.x <= 0.2) {
+                ac.pos.x = 0;
+                ac.rotY = 0;
+                ac.speed = 6.0;
+                ac.state = 'AIRLINER_TAKEOFF_ROLL_GATE2';
+                ac.timer = 0;
+                logATC('Tower', 'Delta 88, wind 340 at 8 kts, Runway 36 CLEARED FOR TAKEOFF!', 'tower');
+              }
+            } else if (ac.state === 'AIRLINER_TAKEOFF_ROLL_GATE2') {
+              ac.speed = Math.min(50.0, ac.speed + 3.8 * dt);
               ac.pos.z -= ac.speed * dt;
-              ac.speed = Math.max(34.0, ac.speed - 3.2 * dt);
-              ac.pos.y = Math.max(0.76, ac.pos.y - Math.max(0.4, (ac.pos.y - 0.76) * 1.6) * dt);
-              updateAIAircraftOrientation(ac, dt, 0, 0.092);
-
-              if (ac.pos.y <= 0.78 && ac.pos.z <= 980) {
-                ac.state = 'JET_TOUCHDOWN';
+              updateAIAircraftOrientation(ac, dt, 0, 0.0);
+              if (ac.speed >= 40.0) {
+                ac.state = 'AIRLINER_ROTATION_GATE2';
+                ac.timer = 0;
+              }
+            } else if (ac.state === 'AIRLINER_ROTATION_GATE2') {
+              ac.speed = Math.min(50.0, ac.speed + 2.5 * dt);
+              ac.pos.z -= ac.speed * dt;
+              ac.pos.y += 3.4 * dt;
+              updateAIAircraftOrientation(ac, dt, 0, 0.09);
+              if (ac.pos.y >= 10.0) ac.state = 'AIRLINER_CLIMBOUT_GATE2';
+            } else if (ac.state === 'AIRLINER_CLIMBOUT_GATE2') {
+              ac.speed = 46.0;
+              ac.pos.z -= ac.speed * dt;
+              ac.pos.y = Math.min(360.0, ac.pos.y + 6.0 * dt);
+              updateAIAircraftOrientation(ac, dt, 0, 0.12);
+              if (ac.pos.z <= -1800) ac.state = 'AIRLINER_CROSSWIND_GATE2';
+            } else if (ac.state === 'AIRLINER_CROSSWIND_GATE2') {
+              ac.pos.x -= ac.speed * dt;
+              ac.pos.y = Math.min(440.0, ac.pos.y + 3.5 * dt);
+              updateAIAircraftOrientation(ac, dt, -Math.PI / 2, 0.05);
+              if (ac.pos.x <= -900) ac.state = 'AIRLINER_DOWNWIND_GATE2';
+            } else if (ac.state === 'AIRLINER_DOWNWIND_GATE2') {
+              ac.pos.z += ac.speed * dt;
+              ac.pos.y = Math.max(190.0, ac.pos.y - 5.0 * dt);
+              updateAIAircraftOrientation(ac, dt, Math.PI, 0.0);
+              if (ac.pos.z >= 4600) ac.state = 'AIRLINER_BASE_GATE2';
+            } else if (ac.state === 'AIRLINER_BASE_GATE2') {
+              updateAIAircraftOrientation(ac, dt, Math.PI / 2, -0.04);
+              ac.pos.x += Math.sin(ac.rotY) * ac.speed * dt;
+              ac.pos.z -= Math.cos(ac.rotY) * ac.speed * dt;
+              ac.pos.y = Math.max(185.0, ac.pos.y - 4.0 * dt);
+              if (ac.pos.x >= -320) ac.state = 'AIRLINER_ILS_FINAL_GATE2';
+            } else if (ac.state === 'AIRLINER_ILS_FINAL_GATE2') {
+              const locHeading = getLocalizerHeading(ac.pos.x, 0.40);
+              updateAIAircraftOrientation(ac, dt, locHeading, -0.052);
+              ac.pos.x += Math.sin(ac.rotY) * ac.speed * dt;
+              ac.pos.z -= Math.cos(ac.rotY) * ac.speed * dt;
+              const glideslopeY = 0.76 + Math.max(0, ac.pos.z - 1000) * 0.0524;
+              const gsError = ac.pos.y - glideslopeY;
+              const sinkRate = (ac.speed * 0.0524) + THREE.MathUtils.clamp(gsError * 0.6, -1.5, 4.0);
+              ac.pos.y = Math.max(0.76, ac.pos.y - sinkRate * dt);
+              if (Math.abs(ac.pos.x) < 0.25) ac.pos.x = 0;
+              if (ac.pos.y <= 12.0 && ac.pos.z <= 1080) {
+                ac.pos.x = 0;
+                ac.state = 'AIRLINER_FLARE_GATE2';
+              }
+            } else if (ac.state === 'AIRLINER_FLARE_GATE2') {
+              ac.pos.z -= ac.speed * dt;
+              ac.speed = Math.max(27.0, ac.speed - 2.8 * dt);
+              ac.pos.y = Math.max(0.76, ac.pos.y - Math.max(0.35, (ac.pos.y - 0.76) * 1.6) * dt);
+              updateAIAircraftOrientation(ac, dt, 0, 0.087);
+              if (ac.pos.y <= 0.78 && ac.pos.z <= 960) {
+                ac.state = 'AIRLINER_TOUCHDOWN_GATE2';
                 ac.pos.y = 0.76;
                 ac.timer = 0;
                 if (typeof spawnTireSmoke === 'function') {
-                  spawnTireSmoke(new THREE.Vector3(ac.pos.x, 0.02, ac.pos.z), new THREE.Vector3(0, -1.4, -ac.speed), 18);
+                  spawnTireSmoke(new THREE.Vector3(ac.pos.x, 0.02, ac.pos.z), new THREE.Vector3(0, -1.2, -ac.speed), 14);
                 }
-                atcSystem.log('Delta 88', 'Touchdown Runway 36, brakes active.', 'pilot');
+                logATC('Delta 88', 'Touchdown Runway 36, reverse thrust active.', 'pilot');
               }
-            } else if (ac.state === 'JET_TOUCHDOWN') {
+            } else if (ac.state === 'AIRLINER_TOUCHDOWN_GATE2') {
               ac.pos.z -= ac.speed * dt;
-              ac.speed = Math.max(6.0, ac.speed - 4.5 * dt);
+              ac.speed = Math.max(7.5, ac.speed - 3.8 * dt);
               updateAIAircraftOrientation(ac, dt, 0, 0.0);
-
-              if (ac.pos.z <= 220 && ac.speed <= 9.0) {
-                ac.state = 'JET_VACATE_A3';
+              if (ac.pos.z <= 220 && ac.speed <= 8.5) {
+                ac.state = 'AIRLINER_VACATE_GATE2';
                 ac.timer = 0;
-                atcSystem.log('Delta 88', 'Vacating Runway 36 via A3 to Stand 2.', 'pilot');
               }
-            } else if (ac.state === 'JET_VACATE_A3') {
+            } else if (ac.state === 'AIRLINER_VACATE_GATE2') {
               ac.pos.x += ac.speed * dt;
               updateAITaxiOrientation(ac, dt, Math.PI / 2);
               if (ac.pos.x >= 99.5) {
                 ac.pos.x = 100;
-                ac.state = 'JET_TAXI_ALPHA';
+                ac.state = 'AIRLINER_TAXI_NORTH_GATE2';
                 ac.timer = 0;
               }
-            } else if (ac.state === 'JET_TAXI_ALPHA') {
-              ac.speed = 5.0;
+            } else if (ac.state === 'AIRLINER_TAXI_NORTH_GATE2') {
+              ac.speed = 5.2;
               ac.pos.z -= ac.speed * dt;
               updateAITaxiOrientation(ac, dt, 0);
               if (ac.pos.z <= -95) {
                 ac.pos.z = -95;
-                ac.state = 'JET_DOCK_GATE2';
+                ac.state = 'AIRLINER_TURN_GATE2';
                 ac.timer = 0;
               }
-            } else if (ac.state === 'JET_DOCK_GATE2') {
-              ac.speed = 3.2;
+            } else if (ac.state === 'AIRLINER_TURN_GATE2') {
+              ac.speed = 3.0;
               ac.pos.x += ac.speed * dt;
               updateAITaxiOrientation(ac, dt, Math.PI / 2);
               if (ac.pos.x >= 155) {
                 ac.pos.x = 155;
                 ac.speed = 0.0;
-                ac.state = 'JET_PARKED_GATE2';
+                ac.state = 'AIRLINER_PARKED_GATE2';
                 ac.timer = 0;
-                atcSystem.log('Delta 88', 'Parked at Stand 2, engine shutdown.', 'pilot');
-              }
-            } else if (ac.state === 'JET_PARKED_GATE2') {
-              if (ac.timer > 40.0) {
-                ac.pos.set(0, 240, 4600);
-                ac.rotY = 0;
-                ac.speed = 48.0;
-                ac.pitch = -0.052;
-                ac.bank = 0.0;
-                ac.state = 'JET_APPROACH';
-                ac.timer = 0;
-                ac._jetCleared = false;
+                logATC('Delta 88', 'Docked at Gate 2, engine shutdown.', 'pilot');
               }
             }
           }
 
           // ===========================================================
-          // AC 6: Charlie 55 (Traffic Circuit with Touch-and-Go)
+          // AC 4: Alpha 18 (F-15C Interceptor Fighter - Mountain Ridge Patrol)
           // ===========================================================
-          if (ac.id === 'Charlie 55') {
-            if (ac.state === 'DOWNWIND') {
-              ac.pos.z += ac.speed * dt;
-              updateAIAircraftOrientation(ac, dt, Math.PI, 0.0);
-
-              if (ac.pos.z >= 1800) {
-                ac.state = 'BASE';
-                atcSystem.log('Charlie 55', 'Left base Runway 36, gear down, full flaps.', 'pilot');
+          if (ac.id === 'Alpha 18') {
+            if (ac.state === 'INTERCEPTOR_HOLD_SHORT') {
+              updateAITaxiOrientation(ac, dt, Math.PI / 2);
+              if (ac.timer > 5.0) {
+                const rw = checkRunwayOccupied('Alpha 18');
+                if (!rw.occupied) {
+                  ac.state = 'INTERCEPTOR_LINEUP';
+                  ac.timer = 0;
+                  logATC('Tower', 'Alpha 18, scramble scramble! Runway 36 unrestricted climb!', 'tower');
+                }
               }
-            } else if (ac.state === 'BASE') {
-              ac.pos.x += ac.speed * dt;
-              ac.pos.y = Math.max(120.0, ac.pos.y - 8.0 * dt);
-              updateAIAircraftOrientation(ac, dt, -Math.PI / 2, -0.04);
-
-              if (ac.pos.x >= -60) {
-                ac.state = 'FINAL_LEG';
-                atcSystem.log('Charlie 55', 'Final Runway 36, cleared touch-and-go.', 'pilot');
+            } else if (ac.state === 'INTERCEPTOR_LINEUP') {
+              ac.pos.x = Math.max(0, ac.pos.x - 4.5 * dt);
+              const turnProg = (48 - ac.pos.x) / 48;
+              updateAITaxiOrientation(ac, dt, Math.PI / 2 - turnProg * (Math.PI / 2));
+              if (ac.pos.x <= 0.2) {
+                ac.pos.x = 0;
+                ac.rotY = 0;
+                ac.speed = 10.0;
+                ac.state = 'INTERCEPTOR_SCRAMBLE_ROLL';
+                ac.timer = 0;
+                logATC('Alpha 18', 'Max afterburner engaged, rolling Runway 36.', 'pilot');
               }
-            } else if (ac.state === 'FINAL_LEG') {
+            } else if (ac.state === 'INTERCEPTOR_SCRAMBLE_ROLL') {
+              ac.speed = Math.min(92.0, ac.speed + 26.0 * dt);
               ac.pos.z -= ac.speed * dt;
+              updateAIAircraftOrientation(ac, dt, 0, 0.0);
+              if (ac.speed >= 60.0) {
+                ac.state = 'INTERCEPTOR_HIGH_CLIMB';
+                ac.timer = 0;
+              }
+            } else if (ac.state === 'INTERCEPTOR_HIGH_CLIMB') {
+              ac.speed = Math.min(92.0, ac.speed + 10.0 * dt);
+              ac.pos.z -= ac.speed * dt;
+              ac.pos.y = Math.min(550.0, ac.pos.y + 35.0 * dt);
+              updateAIAircraftOrientation(ac, dt, 0, 0.44);
+              if (ac.pos.z <= -2000) {
+                ac.state = 'INTERCEPTOR_CAP_TURN';
+                logATC('Alpha 18', 'Angels 2, heading West into ridge CAP patrol.', 'pilot');
+              }
+            } else if (ac.state === 'INTERCEPTOR_CAP_TURN') {
+              updateAIAircraftOrientation(ac, dt, -Math.PI / 2, 0.05, 0.95, 0.88);
+              ac.pos.x += Math.sin(ac.rotY) * ac.speed * dt;
+              ac.pos.z -= Math.cos(ac.rotY) * ac.speed * dt;
+              ac.pos.y = Math.min(550.0, ac.pos.y + 4.0 * dt);
+              if (ac.pos.x <= -1050) ac.state = 'INTERCEPTOR_CAP_DOWNWIND';
+            } else if (ac.state === 'INTERCEPTOR_CAP_DOWNWIND') {
+              ac.speed = 85.0;
+              ac.pos.z += ac.speed * dt;
+              updateAIAircraftOrientation(ac, dt, Math.PI, 0.0, 0.6, 0.4);
+              if (ac.pos.z >= 2600) ac.state = 'INTERCEPTOR_CAP_BASE';
+            } else if (ac.state === 'INTERCEPTOR_CAP_BASE') {
+              updateAIAircraftOrientation(ac, dt, Math.PI / 2, -0.06, 0.85, 0.7);
+              ac.pos.x += Math.sin(ac.rotY) * ac.speed * dt;
+              ac.pos.z -= Math.cos(ac.rotY) * ac.speed * dt;
+              ac.pos.y = Math.max(180.0, ac.pos.y - 18.0 * dt);
+              if (ac.pos.x >= -350) ac.state = 'INTERCEPTOR_FINAL';
+            } else if (ac.state === 'INTERCEPTOR_FINAL') {
+              const locHeading = getLocalizerHeading(ac.pos.x, 0.45);
+              updateAIAircraftOrientation(ac, dt, locHeading, ac.pos.y < 5.0 ? 0.05 : -0.05, 0.8, 0.6);
+              ac.pos.x += Math.sin(ac.rotY) * ac.speed * dt;
+              ac.pos.z -= Math.cos(ac.rotY) * ac.speed * dt;
+              ac.speed = Math.max(48.0, ac.speed - 12.0 * dt);
               ac.pos.y = Math.max(0.76, ac.pos.y - 14.0 * dt);
-              updateAIAircraftOrientation(ac, dt, 0, ac.pos.y < 3.0 ? 0.07 : -0.04);
+              if (Math.abs(ac.pos.x) < 0.25) ac.pos.x = 0;
+              if (ac.pos.y <= 0.82 && ac.pos.z <= 920) {
+                ac.pos.x = 0;
+                ac.pos.y = 0.76;
+                ac.rotY = 0;
+                ac.state = 'INTERCEPTOR_TOUCHDOWN';
+                ac.timer = 0;
+                if (typeof spawnTireSmoke === 'function') {
+                  spawnTireSmoke(new THREE.Vector3(ac.pos.x, 0.02, ac.pos.z), new THREE.Vector3(0, -1.2, -ac.speed), 12);
+                }
+                logATC('Alpha 18', 'Touchdown Runway 36, aerodynamic braking.', 'pilot');
+              }
+            } else if (ac.state === 'INTERCEPTOR_TOUCHDOWN') {
+              ac.pos.z -= ac.speed * dt;
+              ac.speed = Math.max(8.0, ac.speed - 6.0 * dt);
+              updateAIAircraftOrientation(ac, dt, 0, 0.0);
+              if (ac.pos.z <= 220 && ac.speed <= 9.0) {
+                ac.state = 'INTERCEPTOR_VACATE_A3';
+                ac.timer = 0;
+              }
+            } else if (ac.state === 'INTERCEPTOR_VACATE_A3') {
+              ac.pos.x += ac.speed * dt;
+              updateAITaxiOrientation(ac, dt, Math.PI / 2);
+              if (ac.pos.x >= 99.5) {
+                ac.pos.x = 100;
+                ac.state = 'INTERCEPTOR_TAXI_SOUTH';
+                ac.timer = 0;
+              }
+            } else if (ac.state === 'INTERCEPTOR_TAXI_SOUTH') {
+              ac.speed = 5.5;
+              ac.pos.z += ac.speed * dt;
+              updateAITaxiOrientation(ac, dt, Math.PI);
+              if (ac.pos.z >= 1150) {
+                ac.pos.z = 1150;
+                ac.state = 'INTERCEPTOR_TURN_A1';
+                ac.timer = 0;
+              }
+            } else if (ac.state === 'INTERCEPTOR_TURN_A1') {
+              ac.speed = 3.5;
+              ac.pos.x = Math.max(48, ac.pos.x - ac.speed * dt);
+              updateAITaxiOrientation(ac, dt, -Math.PI / 2);
+              if (ac.pos.x <= 48.2) {
+                ac.pos.x = 48;
+                ac.rotY = Math.PI / 2;
+                ac.speed = 0.0;
+                ac.state = 'INTERCEPTOR_HOLD_SHORT';
+                ac.timer = 0;
+                logATC('Alpha 18', 'Holding short Runway 36 at A1, armed and ready.', 'pilot');
+              }
+            }
+          }
 
-              if (ac.pos.y <= 0.85 && ac.pos.z <= 900) {
+          // ===========================================================
+          // AC 5: SkyLine 42 (Cirrus SR22 Sport - Continuous VFR Circuit)
+          // ===========================================================
+          if (ac.id === 'SkyLine 42') {
+            if (ac.state === 'VFR_DOWNWIND') {
+              ac.pos.z += ac.speed * dt;
+              ac.pos.y = Math.min(310.0, ac.pos.y + 4.5 * dt);
+              updateAIAircraftOrientation(ac, dt, Math.PI, 0.0);
+              if (ac.pos.z >= 1750) {
+                ac.state = 'VFR_BASE';
+                logATC('SkyLine 42', 'Left base Runway 36, flaps 50.', 'pilot');
+              }
+            } else if (ac.state === 'VFR_BASE') {
+              updateAIAircraftOrientation(ac, dt, Math.PI / 2, -0.04);
+              ac.pos.x += Math.sin(ac.rotY) * ac.speed * dt;
+              ac.pos.z -= Math.cos(ac.rotY) * ac.speed * dt;
+              ac.pos.y = Math.max(120.0, ac.pos.y - 7.0 * dt);
+              if (ac.pos.x >= -260) {
+                ac.state = 'VFR_FINAL';
+                logATC('SkyLine 42', 'Final Runway 36, cleared touch-and-go.', 'pilot');
+              }
+            } else if (ac.state === 'VFR_FINAL') {
+              const locHeading = getLocalizerHeading(ac.pos.x, 0.35);
+              updateAIAircraftOrientation(ac, dt, locHeading, -0.052);
+              ac.pos.x += Math.sin(ac.rotY) * ac.speed * dt;
+              ac.pos.z -= Math.cos(ac.rotY) * ac.speed * dt;
+              ac.pos.y = Math.max(0.76, ac.pos.y - (ac.speed * 0.0524) * dt);
+              if (Math.abs(ac.pos.x) < 0.25) ac.pos.x = 0;
+              if (ac.pos.y <= 7.0 && ac.pos.z <= 1040) {
+                ac.pos.x = 0;
+                ac.state = 'VFR_FLARE';
+              }
+            } else if (ac.state === 'VFR_FLARE') {
+              ac.pos.z -= ac.speed * dt;
+              ac.speed = Math.max(26.0, ac.speed - 2.5 * dt);
+              ac.pos.y = Math.max(0.76, ac.pos.y - Math.max(0.3, (ac.pos.y - 0.76) * 1.5) * dt);
+              updateAIAircraftOrientation(ac, dt, 0, 0.08);
+              if (ac.pos.y <= 0.78 && ac.pos.z <= 940) {
+                ac.pos.y = 0.76;
+                ac.state = 'VFR_TOUCHDOWN';
+                ac.timer = 0;
                 if (typeof spawnTireSmoke === 'function') {
                   spawnTireSmoke(new THREE.Vector3(ac.pos.x, 0.02, ac.pos.z), new THREE.Vector3(0, -1.0, -ac.speed), 8);
                 }
-                atcSystem.log('Charlie 55', 'Touchdown, full power, rotating for touch-and-go.', 'pilot');
-                ac.state = 'TOUCH_AND_GO_CLIMB';
+                logATC('SkyLine 42', 'Touchdown, flaps retracting, full throttle touch-and-go!', 'pilot');
+              }
+            } else if (ac.state === 'VFR_TOUCHDOWN') {
+              ac.pos.z -= ac.speed * dt;
+              updateAIAircraftOrientation(ac, dt, 0, 0.0);
+              if (ac.timer > 0.4) {
+                ac.state = 'VFR_TOUCH_AND_GO';
                 ac.timer = 0;
               }
-            } else if (ac.state === 'TOUCH_AND_GO_CLIMB') {
-              ac.speed = Math.min(42.0, ac.speed + 3.5 * dt);
+            } else if (ac.state === 'VFR_TOUCH_AND_GO') {
+              ac.speed = Math.min(42.0, ac.speed + 4.2 * dt);
               ac.pos.z -= ac.speed * dt;
-              ac.pos.y += 5.5 * dt;
-              updateAIAircraftOrientation(ac, dt, 0, 0.13);
-
-              if (ac.pos.z <= -1400) {
-                ac.state = 'CROSSWIND';
-              }
-            } else if (ac.state === 'CROSSWIND') {
+              updateAIAircraftOrientation(ac, dt, 0, 0.0);
+              if (ac.speed >= 34.0) ac.state = 'VFR_CLIMBOUT';
+            } else if (ac.state === 'VFR_CLIMBOUT') {
+              ac.speed = 38.0;
+              ac.pos.z -= ac.speed * dt;
+              ac.pos.y = Math.min(310.0, ac.pos.y + 5.5 * dt);
+              updateAIAircraftOrientation(ac, dt, 0, 0.11);
+              if (ac.pos.z <= -1500) ac.state = 'VFR_CROSSWIND';
+            } else if (ac.state === 'VFR_CROSSWIND') {
               ac.pos.x -= ac.speed * dt;
-              ac.pos.y = Math.min(310.0, ac.pos.y + 12.0 * dt);
-              updateAIAircraftOrientation(ac, dt, Math.PI / 2, 0.08);
-
+              ac.pos.y = Math.min(310.0, ac.pos.y + 4.5 * dt);
+              updateAIAircraftOrientation(ac, dt, -Math.PI / 2, 0.04);
               if (ac.pos.x <= -680) {
-                ac.state = 'DOWNWIND';
-                ac.pos.y = 310.0;
-                atcSystem.log('Charlie 55', 'Left downwind Runway 36, pattern altitude.', 'pilot');
+                ac.rotY = Math.PI;
+                ac.state = 'VFR_DOWNWIND';
+              }
+            }
+          }
+
+          // ===========================================================
+          // AC 6: Sierra 09 (King Air 350 Twin - GA Apron Stand 3 Circuit)
+          // ===========================================================
+          if (ac.id === 'Sierra 09') {
+            if (ac.state === 'TWIN_PARKED_APRON') {
+              updateAITaxiOrientation(ac, dt, -Math.PI / 2);
+              if (ac.timer > 15.0) {
+                ac.state = 'TWIN_TAXI_OUT';
+                ac.timer = 0;
+                logATC('Sierra 09', 'Ground, Sierra 09 on Stand 3, taxiing via Alpha.', 'pilot');
+              }
+            } else if (ac.state === 'TWIN_TAXI_OUT') {
+              ac.speed = 3.5;
+              ac.pos.x = Math.max(100, ac.pos.x - ac.speed * dt);
+              updateAITaxiOrientation(ac, dt, -Math.PI / 2);
+              if (ac.pos.x <= 100.2) {
+                ac.pos.x = 100;
+                ac.state = 'TWIN_TAXI_SOUTH';
+                ac.timer = 0;
+              }
+            } else if (ac.state === 'TWIN_TAXI_SOUTH') {
+              ac.speed = 5.2;
+              ac.pos.z += ac.speed * dt;
+              updateAITaxiOrientation(ac, dt, Math.PI);
+              if (ac.pos.z >= 1140) {
+                ac.pos.z = 1140;
+                ac.state = 'TWIN_HOLD_SHORT';
+                ac.timer = 0;
+              }
+            } else if (ac.state === 'TWIN_HOLD_SHORT') {
+              ac.pos.x = Math.max(36, ac.pos.x - 3.2 * dt);
+              updateAITaxiOrientation(ac, dt, -Math.PI / 2);
+              if (ac.pos.x <= 36.2 && ac.timer > 5.0) {
+                const rw = checkRunwayOccupied('Sierra 09');
+                if (!rw.occupied) {
+                  ac.state = 'TWIN_LINEUP';
+                  ac.timer = 0;
+                }
+              }
+            } else if (ac.state === 'TWIN_LINEUP') {
+              ac.pos.x = Math.max(0, ac.pos.x - 3.4 * dt);
+              const turnProg = (36 - ac.pos.x) / 36;
+              updateAITaxiOrientation(ac, dt, -Math.PI / 2 + turnProg * (Math.PI / 2));
+              if (ac.pos.x <= 0.2) {
+                ac.pos.x = 0;
+                ac.rotY = 0;
+                ac.speed = 8.0;
+                ac.state = 'TWIN_TAKEOFF_ROLL';
+                ac.timer = 0;
+                logATC('Tower', 'Sierra 09, wind 340 at 8 kts, Runway 36 CLEARED FOR TAKEOFF!', 'tower');
+              }
+            } else if (ac.state === 'TWIN_TAKEOFF_ROLL') {
+              ac.speed = Math.min(50.0, ac.speed + 4.5 * dt);
+              ac.pos.z -= ac.speed * dt;
+              updateAIAircraftOrientation(ac, dt, 0, 0.0);
+              if (ac.speed >= 42.0) {
+                ac.state = 'TWIN_CLIMBOUT';
+                ac.timer = 0;
+              }
+            } else if (ac.state === 'TWIN_CLIMBOUT') {
+              ac.speed = 46.0;
+              ac.pos.z -= ac.speed * dt;
+              ac.pos.y = Math.min(360.0, ac.pos.y + 6.2 * dt);
+              updateAIAircraftOrientation(ac, dt, 0, 0.13);
+              if (ac.pos.z <= -1750) ac.state = 'TWIN_CROSSWIND';
+            } else if (ac.state === 'TWIN_CROSSWIND') {
+              ac.pos.x -= ac.speed * dt;
+              ac.pos.y = Math.min(380.0, ac.pos.y + 3.5 * dt);
+              updateAIAircraftOrientation(ac, dt, -Math.PI / 2, 0.05);
+              if (ac.pos.x <= -780) ac.state = 'TWIN_DOWNWIND';
+            } else if (ac.state === 'TWIN_DOWNWIND') {
+              ac.pos.z += ac.speed * dt;
+              ac.pos.y = Math.max(140.0, ac.pos.y - 6.0 * dt);
+              updateAIAircraftOrientation(ac, dt, Math.PI, 0.0);
+              if (ac.pos.z >= 3500) ac.state = 'TWIN_BASE';
+            } else if (ac.state === 'TWIN_BASE') {
+              updateAIAircraftOrientation(ac, dt, Math.PI / 2, -0.04);
+              ac.pos.x += Math.sin(ac.rotY) * ac.speed * dt;
+              ac.pos.z -= Math.cos(ac.rotY) * ac.speed * dt;
+              ac.pos.y = Math.max(130.0, ac.pos.y - 4.0 * dt);
+              if (ac.pos.x >= -280) ac.state = 'TWIN_FINAL';
+            } else if (ac.state === 'TWIN_FINAL') {
+              const locHeading = getLocalizerHeading(ac.pos.x, 0.38);
+              updateAIAircraftOrientation(ac, dt, locHeading, -0.052);
+              ac.pos.x += Math.sin(ac.rotY) * ac.speed * dt;
+              ac.pos.z -= Math.cos(ac.rotY) * ac.speed * dt;
+              const glideslopeY = 0.76 + Math.max(0, ac.pos.z - 1000) * 0.0524;
+              const gsError = ac.pos.y - glideslopeY;
+              const sinkRate = (ac.speed * 0.0524) + THREE.MathUtils.clamp(gsError * 0.6, -1.5, 4.0);
+              ac.pos.y = Math.max(0.76, ac.pos.y - sinkRate * dt);
+              if (Math.abs(ac.pos.x) < 0.25) ac.pos.x = 0;
+              if (ac.pos.y <= 0.85 && ac.pos.z <= 960) {
+                ac.pos.x = 0;
+                ac.pos.y = 0.76;
+                ac.rotY = 0;
+                ac.state = 'TWIN_TOUCHDOWN';
+                ac.timer = 0;
+                if (typeof spawnTireSmoke === 'function') {
+                  spawnTireSmoke(new THREE.Vector3(ac.pos.x, 0.02, ac.pos.z), new THREE.Vector3(0, -1.2, -ac.speed), 10);
+                }
+                logATC('Sierra 09', 'Touchdown Runway 36, beta reverse braking.', 'pilot');
+              }
+            } else if (ac.state === 'TWIN_TOUCHDOWN') {
+              ac.pos.z -= ac.speed * dt;
+              ac.speed = Math.max(7.0, ac.speed - 4.2 * dt);
+              updateAIAircraftOrientation(ac, dt, 0, 0.0);
+              if (ac.pos.z <= 220 && ac.speed <= 8.5) {
+                ac.state = 'TWIN_VACATE_A3';
+                ac.timer = 0;
+              }
+            } else if (ac.state === 'TWIN_VACATE_A3') {
+              ac.pos.x += ac.speed * dt;
+              updateAITaxiOrientation(ac, dt, Math.PI / 2);
+              if (ac.pos.x >= 99.5) {
+                ac.pos.x = 100;
+                ac.state = 'TWIN_TAXI_NORTH';
+                ac.timer = 0;
+              }
+            } else if (ac.state === 'TWIN_TAXI_NORTH') {
+              ac.speed = 5.0;
+              ac.pos.z -= ac.speed * dt;
+              updateAITaxiOrientation(ac, dt, 0);
+              if (ac.pos.z <= -30) {
+                ac.pos.z = -30;
+                ac.state = 'TWIN_TURN_APRON';
+                ac.timer = 0;
+              }
+            } else if (ac.state === 'TWIN_TURN_APRON') {
+              ac.speed = 3.2;
+              ac.pos.x += ac.speed * dt;
+              updateAITaxiOrientation(ac, dt, Math.PI / 2);
+              if (ac.pos.x >= 165) {
+                ac.pos.x = 165;
+                ac.speed = 0.0;
+                ac.rotY = -Math.PI / 2;
+                ac.state = 'TWIN_PARKED_APRON';
+                ac.timer = 0;
+                logATC('Sierra 09', 'Parked on Stand 3, engines secured.', 'pilot');
               }
             }
           }
 
           // Synchronize 3D mesh transform
-          ac.mesh.position.copy(ac.pos);
-        });
+          if (ac.mesh) {
+            ac.mesh.position.copy(ac.pos);
+          }
+        }
       }
     }
 
@@ -9926,13 +10747,14 @@
       const hudGlass = new THREE.Mesh(new THREE.PlaneGeometry(0.28, 0.20), hudGlassMat);
       hudGlass.rotation.x = -0.42;
       hudGlass.position.set(0, 0.125, 0.03);
-      hudGlass.renderOrder = 999;
+      hudGlass.renderOrder = 9999;
       hudUnitGroup.add(hudGlass);
       window.hudGlassMesh = hudGlass;
 
-      // Bezel Frame
-      const hudFrame = new THREE.Mesh(new THREE.BoxGeometry(0.205, 0.008, 0.01), darkCompositeMat);
-      hudFrame.position.set(0, 0.175, 0.06);
+      // Top Bezel Frame Bracket (mounted at the top edge of glass so it never obstructs symbology)
+      const hudFrame = new THREE.Mesh(new THREE.BoxGeometry(0.285, 0.008, 0.012), darkCompositeMat);
+      hudFrame.position.set(0, 0.218, -0.012);
+      hudFrame.rotation.x = -0.42;
       hudUnitGroup.add(hudFrame);
 
       airframeGroup.add(hudUnitGroup);
@@ -10351,29 +11173,28 @@
 
 
       // Dual-pass tinted canopy glass:
-      // - Outer coating (FrontSide): dark near-opaque tint — makes interior barely visible from outside
-      // - Inner glass (BackSide): lighter tint — transparent enough for pilot to see through from cockpit
+      // - Outer coating (FrontSide): sleek deep midnight navy mirror tint (opacity 0.88) — interior is barely visible from exterior
+      // - Inner glass (BackSide): ultra-clear anti-glare aviation optical glass (opacity 0.10) — crystal-clear panoramic visibility from cockpit
       const canopyOuterMat = new THREE.MeshStandardMaterial({
-        color: 0x0d1b2e,      // Very dark midnight blue
-        roughness: 0.05,
-        metalness: 0.55,
-        envMapIntensity: 2.5,
+        color: 0x07111e,
+        roughness: 0.04,
+        metalness: 0.85,
+        envMapIntensity: 2.8,
         transparent: true,
-        opacity: 0.72,        // Near-opaque from exterior — barely see inside
+        opacity: 0.88,
         depthWrite: false,
         side: THREE.FrontSide
       });
 
-      // Inner glass tint: darker teal with reduced opacity for cockpit view
       const singleCanopyGlassMat = new THREE.MeshStandardMaterial({
-        color: 0x7dd3f0,      // Light sky-blue tint
-        roughness: 0.04,
-        metalness: 0.20,
-        envMapIntensity: 1.4,
+        color: 0xbae6fd,
+        roughness: 0.02,
+        metalness: 0.15,
+        envMapIntensity: 1.2,
         transparent: true,
-        opacity: 0.20,        // Mostly clear from inside
+        opacity: 0.10,
         depthWrite: false,
-        side: THREE.BackSide
+        side: THREE.DoubleSide
       });
 
       // A. Main Arched Canopy Bubble (Z = -0.72 to +0.50, length 1.22m)
@@ -10424,8 +11245,9 @@
             const c = (j + 1) * stride + (i + 1);
             const d = j * stride + (i + 1);
 
-            indices.push(a, b, d);
-            indices.push(b, c, d);
+            // Winding order oriented so outward normal points UP/OUTWARD
+            indices.push(a, d, b);
+            indices.push(b, d, c);
           }
         }
 
@@ -10488,6 +11310,9 @@
       rearCapOuter.rotation.copy(rearCap.rotation);
       rearCapOuter.scale.copy(rearCap.scale);
       bubbleCanopyGroup.add(rearCap, rearCapOuter);
+
+      window.canopyOuterMeshes = [canopyArchOuter, windscreenOuter, rearCapOuter];
+      window.canopyInnerMeshes = [canopyArch, windscreen, rearCap];
 
 
       // Aft Composite Turtledeck Headrest Fairing
@@ -11591,18 +12416,19 @@
       const pos = centerPos || { x: 0, y: 0.5, z: 0 };
       const iv = impactVel || { x: 0, y: 0, z: 0 };
 
-      // 1. High-Intensity Dynamic Blast Flash Light (illuminates airframe wreckage & ground)
+      // 1. High-Intensity Dynamic Blast Flash Light (Fast, snappy optical flash)
       if (!window.fireballLight) {
-        window.fireballLight = new THREE.PointLight(0xff7711, 105.0, 140.0, 1.15);
+        window.fireballLight = new THREE.PointLight(0xffaa33, 60.0, 50.0, 1.2);
         scene.add(window.fireballLight);
       }
       window.fireballLight.position.set(pos.x, Math.max(1.8, pos.y + 1.2), pos.z);
       window.fireballLight.visible = true;
-      window.fireballLight.intensity = 105.0;
+      window.fireballLight.intensity = 60.0;
+      window.fireballLight.distance = 45.0;
 
       // Dynamic Thermal PointLight attached to the main burning fuselage
       if (!window.thermalFireLight) {
-        window.thermalFireLight = new THREE.PointLight(0xfff1aa, 48.0, 110.0, 1.25);
+        window.thermalFireLight = new THREE.PointLight(0xfff1aa, 48.0, 60.0, 1.25);
         scene.add(window.thermalFireLight);
       }
       window.thermalFireLight.position.set(pos.x, Math.max(1.2, pos.y + 1.0), pos.z);
@@ -11611,27 +12437,19 @@
       window.thermalFireLight.color.setHex(0xfff1aa);
       window._thermalFlashBoost = 60.0;
 
-      // 2. Dual-Tier Blackened Ground Scorch Crater Decals
+      // 2. Blackened Ground Scorch Crater Decal
       if (!window.scorchDecal) {
         const scorchGeo = new THREE.CircleGeometry(4.8, 24);
         scorchGeo.rotateX(-Math.PI / 2);
         const scorchMat = new THREE.MeshBasicMaterial({ color: 0x050505, transparent: true, opacity: 0.94, depthWrite: false });
         window.scorchDecal = new THREE.Mesh(scorchGeo, scorchMat);
         scene.add(window.scorchDecal);
-
-        const ringGeo = new THREE.RingGeometry(4.6, 9.2, 28);
-        ringGeo.rotateX(-Math.PI / 2);
-        const ringMat = new THREE.MeshBasicMaterial({ color: 0x1c1917, transparent: true, opacity: 0.65, depthWrite: false, side: THREE.DoubleSide });
-        window.scorchRingDecal = new THREE.Mesh(ringGeo, ringMat);
-        scene.add(window.scorchRingDecal);
       }
       window.scorchDecal.position.set(pos.x, 0.02, pos.z);
       window.scorchDecal.visible = true;
-      window.scorchRingDecal.position.set(pos.x, 0.021, pos.z);
-      window.scorchRingDecal.visible = true;
 
-      // 3. Shockwave Blast Rings (Ground expansion ring + expanding aerial hemispherical shockwave dome)
-      const blastRingGeo = new THREE.RingGeometry(0.8, 2.6, 36);
+      // 3. Ground Shockwave Ring (Single clean planar ring)
+      const blastRingGeo = new THREE.RingGeometry(0.8, 2.4, 32);
       blastRingGeo.rotateX(-Math.PI / 2);
       const blastRingMat = new THREE.MeshBasicMaterial({
         color: 0xfff7ed,
@@ -11644,81 +12462,81 @@
       const blastRing = new THREE.Mesh(blastRingGeo, blastRingMat);
       blastRing.position.set(pos.x, Math.max(0.06, pos.y + 0.02), pos.z);
       scene.add(blastRing);
-      window.activeShockwaves.push({
-        mesh: blastRing,
-        age: 0.0,
-        maxAge: 0.72,
-        maxRadius: 28.0,
-        initScale: 1.0,
-        isDome: false
-      });
-
-      const domeGeo = new THREE.SphereGeometry(1.6, 24, 12, 0, Math.PI * 2, 0, Math.PI * 0.5);
-      const domeMat = new THREE.MeshBasicMaterial({
-        color: 0xffedd5,
-        transparent: true,
-        opacity: 0.70,
-        side: THREE.DoubleSide,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false
-      });
-      const blastDome = new THREE.Mesh(domeGeo, domeMat);
-      blastDome.position.set(pos.x, Math.max(0.05, pos.y), pos.z);
-      scene.add(blastDome);
-      window.activeShockwaves.push({
-        mesh: blastDome,
-        age: 0.0,
-        maxAge: 0.60,
-        maxRadius: 22.0,
-        initScale: 1.0,
-        isDome: true
-      });
-
-      // 4. Incandescent Combustion Core Fireballs (44 meshes with thermal color evolution)
-      const coreColors = [0xffffff, 0xfffee0, 0xfef08a, 0xfacc15, 0xf97316, 0xea580c, 0xdc2626, 0x991b1b];
-      const fireGeo = new THREE.DodecahedronGeometry(0.75, 1);
-      for (let i = 0; i < 44; i++) {
-        const isInnerCore = i < 26;
-        const col = coreColors[Math.floor(Math.random() * (isInnerCore ? 4 : coreColors.length))];
-        const mat = new THREE.MeshBasicMaterial({
-          color: col,
-          transparent: true,
-          opacity: 0.96,
-          blending: isInnerCore ? THREE.AdditiveBlending : THREE.NormalBlending,
-          depthWrite: false
-        });
-
-        const mesh = new THREE.Mesh(fireGeo, mat);
-        mesh.position.set(
-          pos.x + (Math.random() - 0.5) * 2.4,
-          pos.y + Math.random() * 1.6,
-          pos.z + (Math.random() - 0.5) * 2.4
-        );
-        const initScale = 0.5 + Math.random() * 0.7;
-        mesh.scale.set(initScale, initScale, initScale);
-        scene.add(mesh);
-
-        const angle = Math.random() * Math.PI * 2;
-        const blastSpeed = 4.0 + Math.random() * 14.0;
-        const velY = (isInnerCore ? 3.5 : 5.5) + Math.random() * 9.0;
-
-        window.activeFireballParticles.push({
-          mesh: mesh,
-          vel: new THREE.Vector3(
-            Math.cos(angle) * blastSpeed + iv.x * 0.28,
-            velY,
-            Math.sin(angle) * blastSpeed + iv.z * 0.28
-          ),
-          angvel: new THREE.Vector3((Math.random() - 0.5) * 8, (Math.random() - 0.5) * 8, (Math.random() - 0.5) * 8),
+      if (window.activeShockwaves) {
+        window.activeShockwaves.push({
+          mesh: blastRing,
           age: 0.0,
-          maxAge: 2.2 + Math.random() * 2.0,
-          growthRate: 3.2 + Math.random() * 4.2,
-          isCore: isInnerCore
+          maxAge: 0.45,
+          maxRadius: 22.0,
+          initScale: 1.0,
+          isDome: false
         });
       }
 
-      // 5. High-Velocity Burning Metal Shrapnel & Spark Trails (72 particles)
-      const sparkGeo = new THREE.BoxGeometry(0.18, 0.18, 0.18);
+      // 4. EXACTLY ONE OR TWO HIGH-DETAIL FIREBALLS (Zero lines of dark smoke)
+      // Fireball 1: Primary Core Fireball (White-hot incandescent center expanding rapidly)
+      const fireGeo1 = new THREE.DodecahedronGeometry(1.6, 2);
+      const fireMat1 = new THREE.MeshBasicMaterial({
+        color: 0xfffbeb,
+        transparent: true,
+        opacity: 0.98,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+      });
+      const coreMesh = new THREE.Mesh(fireGeo1, fireMat1);
+      coreMesh.position.set(pos.x, Math.max(pos.y + 0.4, 0.8), pos.z);
+      scene.add(coreMesh);
+      if (window.activeFireballParticles) {
+        window.activeFireballParticles.push({
+          mesh: coreMesh,
+          vel: new THREE.Vector3(iv.x * 0.12, 3.2, iv.z * 0.12),
+          angvel: new THREE.Vector3((Math.random() - 0.5) * 4, (Math.random() - 0.5) * 4, (Math.random() - 0.5) * 4),
+          age: 0.0,
+          maxAge: 0.75,
+          initScale: 1.2,
+          maxScale: 9.5,
+          buoyancy: 3.8,
+          isCore: true
+        });
+      }
+
+      // Fireball 2: Secondary Fiery Outer Flame Sphere (Warm golden-orange flame volume)
+      const fireGeo2 = new THREE.DodecahedronGeometry(1.3, 2);
+      const fireMat2 = new THREE.MeshBasicMaterial({
+        color: 0xf97316,
+        transparent: true,
+        opacity: 0.92,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+      });
+      const secondMesh = new THREE.Mesh(fireGeo2, fireMat2);
+      const offsetAngle = Math.random() * Math.PI * 2;
+      secondMesh.position.set(
+        pos.x + Math.cos(offsetAngle) * 0.8,
+        Math.max(pos.y + 1.0, 1.4),
+        pos.z + Math.sin(offsetAngle) * 0.8
+      );
+      scene.add(secondMesh);
+      if (window.activeFireballParticles) {
+        window.activeFireballParticles.push({
+          mesh: secondMesh,
+          vel: new THREE.Vector3(
+            Math.cos(offsetAngle) * 1.8 + iv.x * 0.08,
+            4.2,
+            Math.sin(offsetAngle) * 1.8 + iv.z * 0.08
+          ),
+          angvel: new THREE.Vector3((Math.random() - 0.5) * 6, (Math.random() - 0.5) * 6, (Math.random() - 0.5) * 6),
+          age: 0.0,
+          maxAge: 0.85,
+          initScale: 1.0,
+          maxScale: 7.8,
+          buoyancy: 4.5,
+          isCore: false
+        });
+      }
+
+      // 5. Crisp Fast Sparks (Crisp 10 particles instead of 72)
+      const sparkGeo = new THREE.BoxGeometry(0.12, 0.12, 0.12);
       const sparkMat = new THREE.MeshBasicMaterial({
         color: 0xfef08a,
         transparent: true,
@@ -11726,64 +12544,28 @@
         blending: THREE.AdditiveBlending,
         depthWrite: false
       });
-      for (let s = 0; s < 72; s++) {
-        const smesh = new THREE.Mesh(sparkGeo, sparkMat.clone());
+      for (let s = 0; s < 10; s++) {
+        const smesh = new THREE.Mesh(sparkGeo, sparkMat);
         smesh.position.set(pos.x, Math.max(0.3, pos.y + 0.5), pos.z);
         scene.add(smesh);
 
         const theta = Math.random() * Math.PI * 2;
-        const phi = Math.random() * (Math.PI * 0.45); // Upward hemispherical spray
-        const sparkSpeed = 22.0 + Math.random() * 42.0;
+        const phi = Math.random() * (Math.PI * 0.40);
+        const sparkSpeed = 16.0 + Math.random() * 24.0;
 
-        window.activeSparks.push({
-          mesh: smesh,
-          vel: new THREE.Vector3(
-            Math.cos(theta) * Math.sin(phi) * sparkSpeed + iv.x * 0.45,
-            Math.cos(phi) * sparkSpeed * 0.85 + 4.0,
-            Math.sin(theta) * Math.sin(phi) * sparkSpeed + iv.z * 0.45
-          ),
-          angvel: new THREE.Vector3((Math.random() - 0.5) * 22, (Math.random() - 0.5) * 22, (Math.random() - 0.5) * 22),
-          age: 0.0,
-          maxAge: 1.6 + Math.random() * 1.5
-        });
-      }
-
-      // 6. Dense Billowing Dark Mushroom Smoke Plumes (50 volumetric clouds)
-      const smokeColors = [0x09090b, 0x18181b, 0x27272a, 0x3f3f46];
-      const smokeGeo = new THREE.DodecahedronGeometry(1.6, 1);
-      for (let k = 0; k < 50; k++) {
-        const scol = smokeColors[Math.floor(Math.random() * smokeColors.length)];
-        const smkMat = new THREE.MeshBasicMaterial({
-          color: scol,
-          transparent: true,
-          opacity: 0.88,
-          depthWrite: false
-        });
-        const smkMesh = new THREE.Mesh(smokeGeo, smkMat);
-        smkMesh.position.set(
-          pos.x + (Math.random() - 0.5) * 4.0,
-          pos.y + Math.random() * 2.5,
-          pos.z + (Math.random() - 0.5) * 4.0
-        );
-        const initScale = 1.0 + Math.random() * 1.2;
-        smkMesh.scale.set(initScale, initScale, initScale);
-        scene.add(smkMesh);
-
-        const angle = Math.random() * Math.PI * 2;
-        const driftSpeed = 2.0 + Math.random() * 8.0;
-
-        window.activeSmokePlumes.push({
-          mesh: smkMesh,
-          vel: new THREE.Vector3(
-            Math.cos(angle) * driftSpeed + iv.x * 0.15,
-            4.5 + Math.random() * 9.0,
-            Math.sin(angle) * driftSpeed + iv.z * 0.15
-          ),
-          angvel: new THREE.Vector3((Math.random() - 0.5) * 2.5, (Math.random() - 0.5) * 2.5, (Math.random() - 0.5) * 2.5),
-          age: 0.0,
-          maxAge: 4.8 + Math.random() * 2.0,
-          growthRate: 3.8 + Math.random() * 4.2
-        });
+        if (window.activeSparks) {
+          window.activeSparks.push({
+            mesh: smesh,
+            vel: new THREE.Vector3(
+              Math.cos(theta) * Math.sin(phi) * sparkSpeed + iv.x * 0.3,
+              Math.cos(phi) * sparkSpeed * 0.8 + 3.0,
+              Math.sin(theta) * Math.sin(phi) * sparkSpeed + iv.z * 0.3
+            ),
+            angvel: new THREE.Vector3((Math.random() - 0.5) * 16, (Math.random() - 0.5) * 16, (Math.random() - 0.5) * 16),
+            age: 0.0,
+            maxAge: 0.9 + Math.random() * 0.6
+          });
+        }
       }
     }
 
@@ -12148,33 +12930,116 @@
       spawnGroundScrapeParticles(pos, vel, isPaved, Math.max(26.0, spdKts), count);
     }
 
-    // Persistent white rocket motor smoke particle anchored in world space
+    // High-Performance Zero-Allocation Rocket Motor Smoke Particle Pool (Eliminates missile lag, creates 4s persistent billowing highway)
+    let rocketSmokePool = [];
+    const ROCKET_SMOKE_POOL_MAX = 120;
+    let rocketSmokeGeo = null;
+    let rocketSmokeTex = null;
+
+    function initRocketSmokePool() {
+      if (!scene || rocketSmokePool.length > 0) return;
+      rocketSmokeGeo = new THREE.PlaneGeometry(1, 1);
+      const c = document.createElement('canvas');
+      c.width = 64; c.height = 64;
+      const ctx = c.getContext('2d');
+      const g = ctx.createRadialGradient(32, 32, 4, 32, 32, 30);
+      g.addColorStop(0, 'rgba(255, 255, 255, 0.92)');
+      g.addColorStop(0.35, 'rgba(240, 242, 248, 0.70)');
+      g.addColorStop(0.70, 'rgba(215, 220, 230, 0.28)');
+      g.addColorStop(1, 'rgba(190, 200, 215, 0.0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, 64, 64);
+      rocketSmokeTex = new THREE.CanvasTexture(c);
+
+      rocketSmokePool = [];
+      for (let i = 0; i < ROCKET_SMOKE_POOL_MAX; i++) {
+        const mat = new THREE.MeshBasicMaterial({
+          map: rocketSmokeTex,
+          transparent: true,
+          opacity: 0.0,
+          depthWrite: false,
+          blending: THREE.NormalBlending,
+          side: THREE.DoubleSide
+        });
+        const mesh = new THREE.Mesh(rocketSmokeGeo, mat);
+        mesh.visible = false;
+        scene.add(mesh);
+        rocketSmokePool.push({
+          mesh: mesh,
+          active: false,
+          pos: new THREE.Vector3(),
+          vel: new THREE.Vector3(),
+          scale: 0.6,
+          maxScale: 4.2,
+          opacity: 0.85,
+          age: 0,
+          maxLife: 4.0
+        });
+      }
+      window.rocketSmokePool = rocketSmokePool;
+    }
+    window.initRocketSmokePool = initRocketSmokePool;
+
     function spawnRocketSmokeParticle(x, y, z) {
       if (!scene) return;
-      if (!window.activeRocketSmoke) window.activeRocketSmoke = [];
-      const size = 0.35 + Math.random() * 0.55;
-      const smokeGeo = new THREE.SphereGeometry(size, 6, 5);
-      const grayVal = 0.82 + Math.random() * 0.18;
-      const grayHex = Math.round(grayVal * 255);
-      const col = (grayHex << 16) | (grayHex << 8) | grayHex;
-      const sMat = new THREE.MeshBasicMaterial({
-        color: col,
-        transparent: true,
-        opacity: 0.65 + Math.random() * 0.25,
-        depthWrite: false
-      });
-      const m = new THREE.Mesh(smokeGeo, sMat);
-      m.position.set(x, y, z);
-      scene.add(m);
-      window.activeRocketSmoke.push({
-        mesh: m,
-        material: sMat,
-        vel: new THREE.Vector3((Math.random() - 0.5) * 1.2, 0.4 + Math.random() * 0.8, (Math.random() - 0.5) * 1.2),
-        age: 0,
-        maxAge: 2.8 + Math.random() * 1.4
-      });
+      if (!rocketSmokePool || rocketSmokePool.length === 0) initRocketSmokePool();
+      if (!rocketSmokePool || rocketSmokePool.length === 0) return;
+
+      for (let i = 0; i < rocketSmokePool.length; i++) {
+        const p = rocketSmokePool[i];
+        if (!p.active) {
+          p.active = true;
+          p.age = 0;
+          p.maxLife = 3.6 + Math.random() * 0.8; // Persists and dissipates over ~4 seconds
+          p.scale = 0.55 + Math.random() * 0.25;
+          p.maxScale = 3.8 + Math.random() * 1.2;
+          p.opacity = 0.84;
+          // Particle stays anchored in world space
+          p.pos.set(
+            x + (Math.random() - 0.5) * 0.12,
+            y + (Math.random() - 0.5) * 0.12,
+            z + (Math.random() - 0.5) * 0.12
+          );
+          // Very gentle upward buoyancy and atmospheric drift
+          p.vel.set((Math.random() - 0.5) * 0.35, 0.25 + Math.random() * 0.35, (Math.random() - 0.5) * 0.35);
+          p.mesh.position.copy(p.pos);
+          p.mesh.scale.set(p.scale, p.scale, p.scale);
+          p.mesh.material.opacity = p.opacity;
+          p.mesh.visible = true;
+          break;
+        }
+      }
     }
     window.spawnRocketSmokeParticle = spawnRocketSmokeParticle;
+
+    function updateRocketSmoke(dt) {
+      if (!rocketSmokePool || rocketSmokePool.length === 0) return;
+      for (let i = 0; i < rocketSmokePool.length; i++) {
+        const p = rocketSmokePool[i];
+        if (p.active) {
+          p.age += dt;
+          if (p.age >= p.maxLife) {
+            p.active = false;
+            p.mesh.visible = false;
+            continue;
+          }
+          const progress = p.age / p.maxLife;
+          p.pos.addScaledVector(p.vel, dt);
+          p.vel.y += 0.12 * dt; // Subtle buoyant lift
+          p.vel.x *= 0.98;
+          p.vel.z *= 0.98;
+          // Smooth progressive billowing expansion up to 4m
+          const curScale = p.scale + (p.maxScale - p.scale) * Math.pow(progress, 0.55);
+          const curOpacity = p.opacity * Math.pow(1.0 - progress, 1.25);
+          p.mesh.position.copy(p.pos);
+          p.mesh.scale.set(curScale, curScale, curScale);
+          p.mesh.material.opacity = curOpacity;
+          if (camera) p.mesh.quaternion.copy(camera.quaternion);
+        }
+      }
+    }
+    window.updateRocketSmoke = updateRocketSmoke;
+
 
     // Physical Wing Strike Detachment: Separates wing into tumbling world debris, triggers violent travel-speed spin
     function severWing(side = 'left', impactSpeed = 60, hitPoint = null) {
@@ -12259,17 +13124,75 @@
     const _smkGeomCache = new THREE.DodecahedronGeometry(1.3, 1);
 
     function updateWreckageFireEmitters(dt) {
-      if (!window.isCrashed || !scene) return;
+      if (!scene) return;
+      const hasWingFire = !!(window.wingState && window.wingState.hasFire);
+      if (!window.isCrashed && !hasWingFire) return;
 
       const crashElapsed = window.crashTime ? (performance.now() - window.crashTime) : 0;
       const linvel = aircraftBody ? aircraftBody.linvel() : { x: 0, y: 0, z: 0 };
-      const fwdSpeed = Math.sqrt(linvel.x * linvel.x + linvel.z * linvel.z);
+      const fwdSpeed = Math.sqrt((linvel.x || 0) * (linvel.x || 0) + (linvel.z || 0) * (linvel.z || 0));
       const isWreckageHalted = (fwdSpeed < 0.35 && crashElapsed > 2200);
 
-      // 1. Persistent Attached Fire & Smoke Particles Trailing Moving Wreckage
+      // 1. Persistent Attached Fire & Smoke Particles Trailing Moving Wreckage / Wing Fire
       _wreckageFireEmitAccumulator += dt;
       if (_wreckageFireEmitAccumulator >= 0.045 && window.activeAttachedFire.length < 80) {
         _wreckageFireEmitAccumulator = 0.0;
+
+        // Small localized fire & trailing smoke on the aircraft's wing stub from a wing strike
+        if (hasWingFire && aircraftMesh) {
+          const fireSide = (window.wingState && window.wingState.fireSide) || 'left';
+          const sign = (fireSide === 'left' ? -1.0 : 1.0);
+          const stubPos = new THREE.Vector3(sign * 3.8, 0.15, -0.05).applyQuaternion(aircraftMesh.quaternion).add(aircraftMesh.position);
+
+          const fMat = new THREE.MeshBasicMaterial({
+            color: (Math.random() < 0.55 ? 0xf97316 : (Math.random() < 0.5 ? 0xea580c : 0xfef08a)),
+            transparent: true,
+            opacity: 0.92,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false
+          });
+          const fMesh = new THREE.Mesh(_fireGeomCache, fMat);
+          fMesh.position.set(stubPos.x + (Math.random() - 0.5) * 0.35, stubPos.y + (Math.random() - 0.5) * 0.2, stubPos.z + (Math.random() - 0.5) * 0.35);
+          const fScale = 0.32 + Math.random() * 0.35; // Small localized flame
+          fMesh.scale.set(fScale, fScale, fScale);
+          scene.add(fMesh);
+
+          window.activeAttachedFire.push({
+            mesh: fMesh,
+            vel: new THREE.Vector3(
+              (linvel.x || 0) * 0.2 + (Math.random() - 0.5) * 0.7,
+              1.6 + Math.random() * 2.4,
+              (linvel.z || 0) * 0.2 + (Math.random() - 0.5) * 0.7
+            ),
+            angvel: new THREE.Vector3((Math.random() - 0.5) * 6, (Math.random() - 0.5) * 6, (Math.random() - 0.5) * 6),
+            age: 0.0,
+            maxAge: 0.85 + Math.random() * 0.55,
+            growthRate: 1.8 + Math.random() * 1.8,
+            isWhiteHot: false
+          });
+
+          // Small smoke puff trailing from damaged wing
+          if (Math.random() < 0.45 && window.activeSmokePlumes.length < 80) {
+            const sMat = new THREE.MeshBasicMaterial({
+              color: 0x18181b,
+              transparent: true,
+              opacity: 0.78,
+              depthWrite: false
+            });
+            const sMesh = new THREE.Mesh(_smkGeomCache, sMat);
+            sMesh.position.set(stubPos.x + (Math.random() - 0.5) * 0.4, stubPos.y + 0.2, stubPos.z + (Math.random() - 0.5) * 0.4);
+            sMesh.scale.set(0.55, 0.55, 0.55);
+            scene.add(sMesh);
+            window.activeSmokePlumes.push({
+              mesh: sMesh,
+              vel: new THREE.Vector3((linvel.x || 0) * 0.15 + (Math.random() - 0.5) * 0.6, 2.2 + Math.random() * 2.8, (linvel.z || 0) * 0.15 + (Math.random() - 0.5) * 0.6),
+              angvel: new THREE.Vector3((Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2),
+              age: 0.0,
+              maxAge: 3.2 + Math.random() * 1.4,
+              growthRate: 2.2 + Math.random() * 1.8
+            });
+          }
+        }
 
         // A. Severed Wing Fuel Tanks (Intense orange flames & dense black petroleum smoke)
         if (window.detachedDebris && window.detachedDebris.length > 0) {
@@ -12487,9 +13410,9 @@
     }
 
     function updateFireball(dt) {
-      // 1. Dynamic Flash Light Decay
+      // 1. Dynamic Flash Light Decay (Fast, punchy optical flash)
       if (window.fireballLight && window.fireballLight.visible) {
-        window.fireballLight.intensity = Math.max(0, window.fireballLight.intensity - 85.0 * dt);
+        window.fireballLight.intensity = Math.max(0, window.fireballLight.intensity - 140.0 * dt);
         if (window.fireballLight.intensity <= 0.2) window.fireballLight.visible = false;
       }
 
@@ -12555,26 +13478,33 @@
           p.mesh.rotation.x += p.angvel.x * dt;
           p.mesh.rotation.y += p.angvel.y * dt;
 
-          const scaleGrowth = p.growthRate * dt;
-          p.mesh.scale.addScalar(scaleGrowth);
+          const lifeRatio = p.age / p.maxAge;
+          if (p.maxScale !== undefined) {
+            // Explosive bloom: expands violently in first 35% of life, then gently rolls
+            const bloom = 1.0 - Math.pow(Math.max(0.0, 1.0 - Math.min(1.0, lifeRatio * 2.8)), 3.0);
+            const currentScale = p.initScale + (p.maxScale - p.initScale) * bloom;
+            p.mesh.scale.set(currentScale, currentScale, currentScale);
+          } else {
+            const scaleGrowth = p.growthRate * dt;
+            p.mesh.scale.addScalar(scaleGrowth);
+          }
 
-          p.vel.y += 8.5 * dt; // Strong thermal buoyancy draft
-          p.vel.x *= 0.93;
-          p.vel.z *= 0.93;
+          p.vel.y += (p.buoyancy || 4.5) * dt;
+          p.vel.x *= 0.94;
+          p.vel.z *= 0.94;
 
           if (p.mesh.position.y < 0.25) {
             p.mesh.position.y = 0.25;
             p.vel.y = Math.abs(p.vel.y) * 0.25;
           }
 
-          const lifeRatio = p.age / p.maxAge;
           if (lifeRatio >= 1.0) {
             if (p.mesh.parent) p.mesh.parent.remove(p.mesh);
             p.mesh.geometry.dispose();
             p.mesh.material.dispose();
             window.activeFireballParticles.splice(i, 1);
           } else {
-            p.mesh.material.opacity = Math.max(0.0, (1.0 - Math.pow(lifeRatio, 1.4)) * (p.isCore ? 0.96 : 0.75));
+            p.mesh.material.opacity = Math.max(0.0, Math.pow(1.0 - lifeRatio, 1.6) * (p.isCore ? 0.98 : 0.88));
           }
         }
       }
@@ -12786,8 +13716,8 @@
         }
       }
 
-      // 9. Update Continuous Combustion & Smolder Emitters on Wreckage
-      if (window.isCrashed) {
+      // 9. Update Continuous Combustion & Smolder Emitters on Wreckage or Wing Fire
+      if (window.isCrashed || (window.wingState && window.wingState.hasFire)) {
         updateWreckageFireEmitters(dt);
       }
     }
@@ -13423,13 +14353,14 @@
         if (window.aiTraffic && window.aiTraffic.aircraft) {
           for (let i = 0; i < window.aiTraffic.aircraft.length; i++) {
             const ac = window.aiTraffic.aircraft[i];
-            if (ac.state === 'CRASHED_TUMBLING' || !ac.mesh || !ac.mesh.visible) continue;
+            if (ac.state === 'CRASHED_TUMBLING' || ac.isDestroyed || !ac.mesh || !ac.mesh.visible) continue;
             
+            const colR = ac.collisionRadius || 8.0;
             const dX = Math.abs(pos.x - ac.pos.x);
             const dY = Math.abs(pos.y - ac.pos.y);
             const dZ = Math.abs(pos.z - ac.pos.z);
 
-            if (dX < (halfSpan + 4.2) && dY < 3.8 && dZ < 6.8) {
+            if (dX < (halfSpan + colR) && dY < (colR * 0.7) && dZ < (colR * 1.3)) {
               const aiSpeed = ac.speed || 0;
               const aiHeading = ac.rotY || 0;
               const aiVx = Math.sin(aiHeading) * aiSpeed;
@@ -13439,9 +14370,16 @@
               const relSpeedKnots = Math.sqrt(relVx * relVx + linvel.y * linvel.y + relVz * relVz) * 1.94384;
 
               if (relSpeedKnots > 30.0) {
-                ac.state = 'CRASHED_TUMBLING';
-                ac.crashVel = { x: linvel.x * 0.4 + aiVx * 0.6, y: 12.0, z: linvel.z * 0.4 + aiVz * 0.6 };
-                ac.crashRotVel = { x: (Math.random() - 0.5) * 8.0, y: (Math.random() - 0.5) * 8.0, z: (Math.random() - 0.5) * 8.0 };
+                if (typeof ac.triggerDestruction === 'function') {
+                  ac.triggerDestruction(pos);
+                } else {
+                  ac.state = 'CRASHED_TUMBLING';
+                  ac.isDestroyed = true;
+                  ac.crashVel = { x: linvel.x * 0.4 + aiVx * 0.6, y: 12.0, z: linvel.z * 0.4 + aiVz * 0.6 };
+                  ac.tumbleVel = new THREE.Vector3(ac.crashVel.x, ac.crashVel.y, ac.crashVel.z);
+                  ac.crashRotVel = { x: (Math.random() - 0.5) * 8.0, y: (Math.random() - 0.5) * 8.0, z: (Math.random() - 0.5) * 8.0 };
+                  ac.tumbleAngVel = new THREE.Vector3(ac.crashRotVel.x, ac.crashRotVel.y, ac.crashRotVel.z);
+                }
                 triggerCrash(`MID-AIR COLLISION WITH ${ac.id.toUpperCase()}`, {
                   speed: relSpeedKnots,
                   gForce: telemetry.gForce,
@@ -13481,10 +14419,12 @@
         const onPavedSurface = (Math.abs(pos.x) <= 30 && pos.z >= -1350 && pos.z <= 1350) ||
                                (pos.x >= 30 && pos.x <= 260 && pos.z >= -600 && pos.z <= 600);
 
-        // Severed Wing Autorotational Spin Ground Impact
+        // Severed Wing Ground Impact:
+        // Does NOT immediately trigger a catastrophic crash; allows the aircraft to slide, skid, and control the belly slide.
+        // Only crashes if the central fuselage slams down violently at high sink rate.
         if (window.wingState && (!window.wingState.leftAttached || !window.wingState.rightAttached)) {
-          if (pos.y <= 1.15 && speedKnots > 18.0) {
-            triggerCrash(`UNCONTROLLED AUTOROTATIONAL SPIN (${(window.wingState.severedSide || 'WING').toUpperCase()} SEPARATION AT ${Math.round(window.wingState.strikeSpeed || speedKnots)} KTS)`, {
+          if (pos.y <= 0.58 && linvel.y < -5.5 && speedKnots > 30.0) {
+            triggerCrash(`CATASTROPHIC FUSELAGE IMPACT (${(window.wingState.severedSide || 'WING').toUpperCase()} SEPARATION)`, {
               speed: speedKnots,
               gForce: telemetry.gForce,
               sinkRate: sinkRateFpm
@@ -13493,14 +14433,16 @@
           }
         }
 
-        // Severe attitude ground impact (Speed > 30 kts)
+        // Severe attitude ground impact:
+        // Wing strikes on grass or runway skid and scrape instead of immediately exploding into a massive crash.
+        // Only crashes if inverted (roll > 80°) with canopy slamming ground or steep nose dive (pitch > 55°).
         const rot = aircraftBody.rotation();
         _quat.set(rot.x, rot.y, rot.z, rot.w);
         const euler = new THREE.Euler().setFromQuaternion(_quat, 'YXZ');
         const pitchDeg = Math.abs(euler.x * (180 / Math.PI));
         const rollDeg = Math.abs(euler.z * (180 / Math.PI));
 
-        if (pos.y <= 1.2 && speedKnots > 30.0 && (pitchDeg > 35 || rollDeg > 42)) {
+        if (pos.y <= 0.62 && speedKnots > 30.0 && (pitchDeg > 55 || rollDeg > 80)) {
           triggerCrash(`SEVERE ATTITUDE IMPACT (PITCH ${Math.round(pitchDeg)}°, ROLL ${Math.round(rollDeg)}°)`, {
             speed: speedKnots,
             gForce: telemetry.gForce,
@@ -14119,12 +15061,14 @@
         cockpitLook.headOffset.set(0, 0, 0);
         camera.fov = 54;
         camera.updateProjectionMatrix();
+        if (window.canopyOuterMeshes) window.canopyOuterMeshes.forEach(m => { if (m) m.visible = false; });
       } else {
         cameraState.yaw = 0.0;
         cameraState.pitch = 0.15;
         cameraState.distance = 11.5;
         camera.fov = 54;
         camera.updateProjectionMatrix();
+        if (window.canopyOuterMeshes) window.canopyOuterMeshes.forEach(m => { if (m) m.visible = true; });
         if (aircraftMesh) {
           const orbitQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(-cameraState.pitch, cameraState.yaw, 0, 'YXZ'));
           cameraState.currentQuat.copy(aircraftMesh.quaternion).multiply(orbitQuat);
@@ -14677,8 +15621,9 @@
           // --- AIM-9L Sidewinder Rocket Motor Launch ---
           // Align missile longitudinal axis with aircraft nose (forward = -Z in local)
           const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(worldQuat).normalize();
-          // Initial velocity = aircraft velocity + 45 m/s rail ejection impulse
-          const launchVel = planeVel.clone().addScaledVector(fwd, 45.0);
+          // Initial velocity matching current aircraft forward nose vector and true airspeed
+          const planeSpeed = planeVel.length();
+          const launchVel = new THREE.Vector3().addScaledVector(fwd, Math.max(planeSpeed, 35.0));
 
           const missileData = {
             type: 'missile',
@@ -14687,10 +15632,10 @@
             fwd: fwd.clone(),
             vel: launchVel,
             speed: 0,
-            // AIM-9L solid-fuel rocket: 3.2s burn, accelerates to 750 m/s (Mach 2.2)
+            // AIM-9L solid-fuel rocket: 3.2s burn, accelerates forward up to 750 m/s (Mach 2.2)
             burnDuration: 3.2,
-            // Max thrust force needed: (750 - 45) / 3.2 ≈ 220 m/s² acceleration
-            thrustAccel: 220.0,
+            // Acceleration along missile longitudinal axis: (750 - 35) / 3.2 ≈ 223.4 m/s²
+            thrustAccel: 223.4,
             elapsed: 0.0,
             groundY: 0.20,
             // Smoke trail accumulator
@@ -14718,64 +15663,242 @@
     }
     window.releaseWeaponStation = releaseWeaponStation;
 
+    // -------------------------------------------------------------
+    // Ordnance Detonation & Damage System (Massive Fireball & Proximity)
+    // -------------------------------------------------------------
+    function triggerOrdnanceExplosion(centerPos, impactVel, type = 'bomb') {
+      if (!scene) return;
+      const pos = centerPos ? centerPos.clone() : new THREE.Vector3(0, 0.5, 0);
+      const iv = impactVel ? impactVel.clone() : new THREE.Vector3(0, 0, 0);
+      const isBomb = (type === 'bomb' || type === 'Mk-82');
+
+      // 1. High-Intensity Blast Flash Light (Fast, snappy optical flash)
+      if (!window.fireballLight) {
+        window.fireballLight = new THREE.PointLight(0xffaa33, 75.0, 60.0, 1.2);
+        scene.add(window.fireballLight);
+      }
+      window.fireballLight.position.set(pos.x, Math.max(2.5, pos.y + 2.0), pos.z);
+      window.fireballLight.visible = true;
+      window.fireballLight.intensity = isBomb ? 85.0 : 45.0;
+      window.fireballLight.distance = isBomb ? 60.0 : 35.0;
+
+      // 2. Supersonic Expanding Ground Shockwave Ring (Single clean planar ring)
+      const blastRingGeo = new THREE.RingGeometry(0.8, 2.4, 32);
+      blastRingGeo.rotateX(-Math.PI / 2);
+      const blastRingMat = new THREE.MeshBasicMaterial({
+        color: 0xfff7ed,
+        transparent: true,
+        opacity: 0.95,
+        side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+      });
+      const blastRing = new THREE.Mesh(blastRingGeo, blastRingMat);
+      blastRing.position.set(pos.x, Math.max(0.12, pos.y + 0.05), pos.z);
+      scene.add(blastRing);
+      if (window.activeShockwaves) {
+        window.activeShockwaves.push({
+          mesh: blastRing,
+          age: 0.0,
+          maxAge: isBomb ? 0.55 : 0.38,
+          maxRadius: isBomb ? 36.0 : 18.0,
+          initScale: 1.0,
+          isDome: false
+        });
+      }
+
+      // 3. EXACTLY ONE OR TWO HIGH-DETAIL FIREBALLS (Zero lines of dark smoke)
+      // Fireball 1: Primary Core Fireball (White-hot radiant core expanding violently)
+      const fireGeo1 = new THREE.DodecahedronGeometry(isBomb ? 2.6 : 1.5, 2);
+      const fireMat1 = new THREE.MeshBasicMaterial({
+        color: 0xfffbeb,
+        transparent: true,
+        opacity: 0.98,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+      });
+      const coreMesh = new THREE.Mesh(fireGeo1, fireMat1);
+      coreMesh.position.set(pos.x, Math.max(pos.y + 0.5, 1.2), pos.z);
+      coreMesh.scale.set(1.0, 1.0, 1.0);
+      scene.add(coreMesh);
+
+      if (window.activeFireballParticles) {
+        window.activeFireballParticles.push({
+          mesh: coreMesh,
+          vel: new THREE.Vector3(iv.x * 0.08, (isBomb ? 4.5 : 2.5), iv.z * 0.08),
+          angvel: new THREE.Vector3((Math.random() - 0.5) * 4, (Math.random() - 0.5) * 4, (Math.random() - 0.5) * 4),
+          age: 0.0,
+          maxAge: isBomb ? 0.85 : 0.65,
+          initScale: isBomb ? 2.0 : 1.2,
+          maxScale: isBomb ? 16.0 : 8.5,
+          buoyancy: 3.5,
+          isCore: true
+        });
+      }
+
+      // Fireball 2: Secondary Fiery Outer Flame Sphere (Warm golden-orange / amber flame volume)
+      const fireGeo2 = new THREE.DodecahedronGeometry(isBomb ? 2.2 : 1.3, 2);
+      const fireMat2 = new THREE.MeshBasicMaterial({
+        color: 0xf97316,
+        transparent: true,
+        opacity: 0.92,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+      });
+      const secondMesh = new THREE.Mesh(fireGeo2, fireMat2);
+      const offsetAngle = Math.random() * Math.PI * 2;
+      const offsetDist = isBomb ? 1.8 : 0.9;
+      secondMesh.position.set(
+        pos.x + Math.cos(offsetAngle) * offsetDist,
+        Math.max(pos.y + 1.2, 1.8),
+        pos.z + Math.sin(offsetAngle) * offsetDist
+      );
+      secondMesh.scale.set(1.0, 1.0, 1.0);
+      scene.add(secondMesh);
+
+      if (window.activeFireballParticles) {
+        window.activeFireballParticles.push({
+          mesh: secondMesh,
+          vel: new THREE.Vector3(
+            Math.cos(offsetAngle) * (isBomb ? 3.0 : 1.5) + iv.x * 0.06,
+            (isBomb ? 5.5 : 3.0),
+            Math.sin(offsetAngle) * (isBomb ? 3.0 : 1.5) + iv.z * 0.06
+          ),
+          angvel: new THREE.Vector3((Math.random() - 0.5) * 6, (Math.random() - 0.5) * 6, (Math.random() - 0.5) * 6),
+          age: 0.0,
+          maxAge: isBomb ? 0.95 : 0.72,
+          initScale: isBomb ? 1.6 : 1.0,
+          maxScale: isBomb ? 12.5 : 6.8,
+          buoyancy: 4.2,
+          isCore: false
+        });
+      }
+
+      // 4. Scorch Crater Decal (on ground)
+      if (!window.scorchDecal) {
+        const scorchGeo = new THREE.CircleGeometry(isBomb ? 8.5 : 4.2, 24);
+        scorchGeo.rotateX(-Math.PI / 2);
+        const scorchMat = new THREE.MeshBasicMaterial({ color: 0x050505, transparent: true, opacity: 0.90, depthWrite: false });
+        window.scorchDecal = new THREE.Mesh(scorchGeo, scorchMat);
+        scene.add(window.scorchDecal);
+      }
+      window.scorchDecal.position.set(pos.x, 0.02, pos.z);
+      window.scorchDecal.scale.setScalar(isBomb ? 1.4 : 0.85);
+      window.scorchDecal.visible = true;
+
+      // 5. Detonation Audio Synthesis
+      if (typeof soundSystem !== 'undefined' && soundSystem) {
+        if (soundSystem.playWarheadDetonation) soundSystem.playWarheadDetonation(isBomb);
+        if (soundSystem.playDeflagrationRumble) soundSystem.playDeflagrationRumble();
+        if (isBomb && soundSystem.playCrashSound) soundSystem.playCrashSound();
+      }
+
+      // 7. Blast Damage Handling:
+      // A. Other Planes (AI Traffic)
+      const blastRadius = isBomb ? 55.0 : 25.0;
+      if (window.aiTraffic && window.aiTraffic.aircraft) {
+        window.aiTraffic.aircraft.forEach(ac => {
+          if (!ac.pos || ac.isDestroyed) return;
+          const colR = ac.collisionRadius || 8.0;
+          const distToAI = ac.pos.distanceTo(pos);
+          if (distToAI <= (blastRadius + colR)) {
+            if (typeof ac.triggerDestruction === 'function') {
+              ac.triggerDestruction(pos);
+            } else {
+              ac.isDestroyed = true;
+              ac.state = 'CRASHED_TUMBLING';
+              ac.speed = 0;
+              if (ac.mesh) {
+                if (typeof triggerFireballExplosion === 'function') {
+                  triggerFireballExplosion(ac.pos, new THREE.Vector3(0, 2, 0));
+                }
+              }
+            }
+            if (window.atcSystem && window.atcSystem.log) {
+              window.atcSystem.log('TOWER', `CRITICAL: ${ac.id.toUpperCase()} DESTROYED BY ORDNANCE BLAST!`, 'tower');
+            }
+          }
+        });
+      }
+
+      // B. Player Aircraft Blast Damage (100 ft = 30.48 m threshold)
+      const playerPos = (typeof aircraftMesh !== 'undefined' && aircraftMesh && aircraftMesh.position) ? aircraftMesh.position : ((typeof aircraftBody !== 'undefined' && aircraftBody) ? aircraftBody.translation() : null);
+      if (playerPos) {
+        const playerVec = new THREE.Vector3(playerPos.x, playerPos.y, playerPos.z);
+        const distToPlayer = playerVec.distanceTo(pos);
+        if (distToPlayer <= 30.5 && !window.isCrashed) {
+          if (distToPlayer <= 12.0 && typeof triggerCrash === 'function') {
+            // Severe proximity blast (< 12m): catastrophic airframe breakup
+            triggerCrash('ORDNANCE BLAST FRAGMENTATION - SHRAPNEL PENETRATION');
+          } else {
+            // Proximity shockwave & fragmentation damage (12m to 30.5m = 100ft)
+            if (window.wingState) {
+              window.wingState.hasFire = true;
+              window.wingState.fireSide = (Math.random() < 0.5 ? 'left' : 'right');
+            }
+            if (typeof aircraftBody !== 'undefined' && aircraftBody && aircraftBody.applyImpulse) {
+              const blastDir = playerVec.clone().sub(pos).normalize();
+              const impulseMag = (30.5 - distToPlayer) * 110.0;
+              aircraftBody.applyImpulse({ x: blastDir.x * impulseMag, y: Math.max(120, blastDir.y * impulseMag + 180), z: blastDir.z * impulseMag }, true);
+            }
+            if (typeof soundSystem !== 'undefined' && soundSystem && soundSystem.playMetalScrape) {
+              soundSystem.playMetalScrape(0.85, true);
+            }
+            if (window.atcSystem && window.atcSystem.log) {
+              window.atcSystem.log('MAYDAY', `EMERGENCY: HL8006 DAMAGED BY ORDNANCE BLAST (${Math.round(distToPlayer * 3.28084)} FT)!`, 'pilot');
+            }
+          }
+        }
+      }
+
+      // Note: Infrastructure & buildings trigger detonation upon impact, but infrastructure does not take damage.
+    }
+    window.triggerOrdnanceExplosion = triggerOrdnanceExplosion;
+
     // ---- Mk-82 detonation blast helper ----
     function detonateMk82(p) {
-      if (typeof triggerFireballExplosion === 'function') {
-        triggerFireballExplosion(p.mesh.position.clone(), p.vel.clone());
-      } else if (typeof triggerSecondaryFuelDeflagration === 'function') {
-        triggerSecondaryFuelDeflagration(p.mesh.position);
-      }
-      if (soundSystem && typeof soundSystem.playDeflagrationRumble === 'function') soundSystem.playDeflagrationRumble();
-      if (soundSystem && typeof soundSystem.playWarheadDetonation === 'function') soundSystem.playWarheadDetonation(true);
-
-      // 35 m blast radius structural damage query
-      const bx = p.mesh.position.x, bz = p.mesh.position.z;
-      if (window.structureSpatialGrid && typeof window.structureSpatialGrid.queryAABB === 'function') {
-        const hits = window.structureSpatialGrid.queryAABB(bx - 35, bx + 35, bz - 35, bz + 35);
-        if (hits && hits.length > 0) {
-          hits.forEach(h => {
-            if (window.atcSystem && typeof window.atcSystem.log === 'function') {
-              window.atcSystem.log('ORDNANCE', `MK-82 BLAST DAMAGE — ${h.name || 'STRUCTURE'}`, 'tower');
-            }
-          });
-        }
-      }
+      triggerOrdnanceExplosion(p.mesh.position, p.vel, 'bomb');
       if (window.atcSystem && typeof window.atcSystem.log === 'function') {
-        window.atcSystem.log('ORDNANCE', `MK-82 IMPACT (${Math.round(bx)}, ${Math.round(bz)}) — DETONATION`, 'tower');
-      }
-      // Secondary smoke plumes at crater edges — rising columns anchored in world space
-      for (let s = 0; s < 8; s++) {
-        const angle = (s / 8) * Math.PI * 2;
-        const r = 3 + Math.random() * 8;
-        if (typeof spawnRocketSmokeParticle === 'function') {
-          spawnRocketSmokeParticle(bx + Math.cos(angle) * r, 0.3, bz + Math.sin(angle) * r);
-        }
+        window.atcSystem.log('ORDNANCE', `MK-82 IMPACT (${Math.round(p.mesh.position.x)}, ${Math.round(p.mesh.position.z)}) — DETONATION`, 'tower');
       }
     }
     window.detonateMk82 = detonateMk82;
 
     // ---- AIM-9 warhead detonation helper ----
     function detonateAIM9(p) {
-      if (typeof triggerFireballExplosion === 'function') {
-        triggerFireballExplosion(p.mesh.position.clone(), p.vel.clone());
-      } else if (typeof triggerSecondaryFuelDeflagration === 'function') {
-        triggerSecondaryFuelDeflagration(p.mesh.position);
-      }
-      if (soundSystem && typeof soundSystem.playDeflagrationRumble === 'function') soundSystem.playDeflagrationRumble();
-      if (soundSystem && typeof soundSystem.playWarheadDetonation === 'function') soundSystem.playWarheadDetonation(false);
+      triggerOrdnanceExplosion(p.mesh.position, p.vel, 'missile');
       if (window.atcSystem && typeof window.atcSystem.log === 'function') {
         window.atcSystem.log('ORDNANCE', `STATION ${p.stationId}: AIM-9 WARHEAD DETONATED`, 'tower');
       }
     }
     window.detonateAIM9 = detonateAIM9;
 
+    function getTerrainElevationAt(x, z) {
+      let h = 0.20;
+      if ((x < -1300 || x > 1150) && (z > -2200 && z < 2200)) {
+        const mRadius = 360;
+        const mMaxH = 300;
+        for (let m = 0; m < 12; m++) {
+          const isWest = m % 2 === 1;
+          const mx = isWest ? -2100 : 1650;
+          const mz = -2000 + (m / 12) * 4000;
+          const dist2D = Math.sqrt((x - mx) * (x - mx) + (z - mz) * (z - mz));
+          if (dist2D < mRadius) {
+            const mH = (1.0 - (dist2D / mRadius)) * mMaxH;
+            if (mH > h) h = mH;
+          }
+        }
+      }
+      return h;
+    }
+
     function updateProjectiles(dt) {
       if (!activeProjectiles || activeProjectiles.length === 0) return;
       const gravity = 9.81;
       // Mk-82 aerodynamic drag params: Cd=0.28, A=0.0616 m², ρ=1.225 kg/m³, mass=227 kg
-      const bombDragK = 0.5 * 1.225 * 0.28 * 0.0616; // = 0.01059
+      const bombDragK = 0.5 * 1.225 * 0.28 * 0.0616;
       // AIM-9 ballistic coast drag: Cd≈0.3, A=π*(0.065)²≈0.01327 m², mass=87.5 kg
-      const missileDragK = 0.5 * 1.225 * 0.30 * 0.01327; // = 0.002443
+      const missileDragK = 0.5 * 1.225 * 0.30 * 0.01327;
 
       for (let i = activeProjectiles.length - 1; i >= 0; i--) {
         const p = activeProjectiles[i];
@@ -14787,28 +15910,76 @@
         if (p.type === 'bomb') {
           p.elapsed = (p.elapsed || 0) + dt;
 
-          // Gravity
+          // 1. Gravity acceleration
           p.vel.y -= gravity * dt;
 
-          // Quadratic aerodynamic drag
+          // 2. Quadratic atmospheric drag based on current true airspeed
           const speed = p.vel.length();
           if (speed > 0.1) {
-            const dragForce = bombDragK * speed * speed; // N
-            const dragAcc = dragForce / 227; // m/s²
+            const dragForce = bombDragK * speed * speed;
+            const dragAcc = dragForce / 227;
             p.vel.addScaledVector(p.vel, -(dragAcc * dt) / speed);
           }
 
+          // Advance position along velocity vector
           p.mesh.position.addScaledVector(p.vel, dt);
 
-          // Aerodynamic self-alignment: bomb nose gradually rotates into velocity vector
-          const horizSpd = Math.hypot(p.vel.x, p.vel.z);
-          const velNorm = p.vel.clone().normalize();
-          const targetQuat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, -1), velNorm);
-          p.mesh.quaternion.slerp(targetQuat, Math.min(1.0, 0.04 * Math.max(1, p.elapsed * 0.5)));
-          p.mesh.rotation.y += (p.angvel.y || 0) * dt;
+          // 3. Aerodynamic self-alignment:
+          // In createMk82Mesh, the nose points towards local -Z.
+          // Pointing local -Z along velocity means local +Z points towards -vel.
+          if (speed > 1.0) {
+            const lookTarget = new THREE.Vector3(p.mesh.position.x - p.vel.x, p.mesh.position.y - p.vel.y, p.mesh.position.z - p.vel.z);
+            if (typeof THREE.Object3D === 'function' && p.mesh.quaternion && typeof p.mesh.quaternion.slerp === 'function') {
+              const dummy = new THREE.Object3D();
+              dummy.position.set(p.mesh.position.x, p.mesh.position.y, p.mesh.position.z);
+              dummy.lookAt(lookTarget);
+              p.mesh.quaternion.slerp(dummy.quaternion, Math.min(1.0, 2.8 * dt));
+            } else if (p.mesh.rotation && typeof p.mesh.rotation.copy === 'function' && typeof THREE.Object3D === 'function') {
+              const dummy = new THREE.Object3D();
+              dummy.position.set(p.mesh.position.x, p.mesh.position.y, p.mesh.position.z);
+              dummy.lookAt(lookTarget);
+              p.mesh.rotation.copy(dummy.rotation);
+            }
+          }
 
-          const groundLimit = p.groundY !== undefined ? p.groundY : 0.20;
-          if (p.mesh.position.y <= groundLimit) {
+          // 4. Impact detection:
+          // A. Ground & mountain terrain impact
+          const terrainElevation = getTerrainElevationAt(p.mesh.position.x, p.mesh.position.z);
+          const groundLimit = Math.max(p.groundY !== undefined ? p.groundY : 0.20, terrainElevation);
+          let hitGround = p.mesh.position.y <= groundLimit;
+
+          // B. Building / Infrastructure contact
+          let hitBuilding = false;
+          if (!hitGround && window.structureSpatialGrid) {
+            const bx = p.mesh.position.x, bz = p.mesh.position.z, by = p.mesh.position.y;
+            const near = window.structureSpatialGrid.queryAABB(bx - 3.5, bx + 3.5, bz - 3.5, bz + 3.5);
+            if (near && near.length > 0) {
+              for (let n = 0; n < near.length; n++) {
+                const b = near[n];
+                if (by >= (b.minY || 0) && by <= (b.maxY || 60)) {
+                  hitBuilding = true;
+                  break;
+                }
+              }
+            }
+          }
+
+          // C. AI Aircraft contact
+          let hitPlane = false;
+          if (!hitGround && !hitBuilding && window.aiTraffic && window.aiTraffic.aircraft) {
+            for (let a = 0; a < window.aiTraffic.aircraft.length; a++) {
+              const ac = window.aiTraffic.aircraft[a];
+              if (!ac.isDestroyed && ac.pos && ac.pos.distanceTo(p.mesh.position) < ((ac.collisionRadius || 6.0) + 1.2)) {
+                hitPlane = true;
+                if (typeof ac.triggerDestruction === 'function') {
+                  ac.triggerDestruction(p.mesh.position);
+                }
+                break;
+              }
+            }
+          }
+
+          if (hitGround || hitBuilding || hitPlane) {
             detonateMk82(p);
             const bidx = window.activeBombs ? window.activeBombs.indexOf(p) : -1;
             if (bidx !== -1) window.activeBombs.splice(bidx, 1);
@@ -14828,23 +15999,25 @@
               const newSpd = p.vel.length();
               if (newSpd > 750) p.vel.multiplyScalar(750 / newSpd);
             }
-            // Keep missile axis aligned with velocity vector (aerodynamic stability)
-            const vn = p.vel.clone().normalize();
-            const tq = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, -1), vn);
-            p.mesh.quaternion.slerp(tq, Math.min(1, 5.0 * dt));
-            p.fwd.copy(vn);
+            // Keep missile axis aligned with velocity vector
+            const lookTarget = new THREE.Vector3(p.mesh.position.x - p.vel.x, p.mesh.position.y - p.vel.y, p.mesh.position.z - p.vel.z);
+            if (typeof THREE.Object3D === 'function' && p.mesh.quaternion && typeof p.mesh.quaternion.slerp === 'function') {
+              const dummy = new THREE.Object3D();
+              dummy.position.set(p.mesh.position.x, p.mesh.position.y, p.mesh.position.z);
+              dummy.lookAt(lookTarget);
+              p.mesh.quaternion.slerp(dummy.quaternion, Math.min(1.0, 5.0 * dt));
+            }
+            p.fwd.copy(p.vel).normalize();
 
-            // Dense white smoke trail from exhaust nozzle (every ~16ms)
+            // Zero-allocation pooled white rocket motor smoke trail
             p.smokeAccum = (p.smokeAccum || 0) + dt;
-            if (p.smokeAccum >= 0.016) {
+            if (p.smokeAccum >= 0.040) {
               p.smokeAccum = 0;
-              // Nozzle is ~1.4m behind the missile CG
-              const tailPos = p.mesh.position.clone().addScaledVector(p.fwd, -1.4);
+              const tailX = p.mesh.position.x - p.fwd.x * 1.4;
+              const tailY = p.mesh.position.y - p.fwd.y * 1.4;
+              const tailZ = p.mesh.position.z - p.fwd.z * 1.4;
               if (typeof spawnRocketSmokeParticle === 'function') {
-                spawnRocketSmokeParticle(tailPos.x, tailPos.y, tailPos.z);
-              } else if (typeof spawnScrapeSparkPuff === 'function') {
-                // Fallback: use spark puff system with small bright scale
-                spawnScrapeSparkPuff(tailPos.x, tailPos.y, tailPos.z, 1.5);
+                spawnRocketSmokeParticle(tailX, tailY, tailZ);
               }
             }
           } else {
@@ -14858,17 +16031,41 @@
           }
           p.mesh.position.addScaledVector(p.vel, dt);
 
-          // Terrain + structure impact detection; 12s self-destruct
-          const groundLimit = p.groundY !== undefined ? p.groundY : 0.20;
-          let detonated = p.mesh.position.y <= groundLimit || p.elapsed > 12.0;
+          // Impact detection: ground, mountains, buildings, AI planes, or 12s self-destruct
+          const terrainElevation = getTerrainElevationAt(p.mesh.position.x, p.mesh.position.z);
+          const groundLimit = Math.max(p.groundY !== undefined ? p.groundY : 0.20, terrainElevation);
+          let hitGround = p.mesh.position.y <= groundLimit;
 
-          if (!detonated && window.structureSpatialGrid) {
-            const mx = p.mesh.position.x, mz = p.mesh.position.z;
-            const hits = window.structureSpatialGrid.queryAABB(mx - 1, mx + 1, mz - 1, mz + 1);
-            if (hits && hits.length > 0) detonated = true;
+          let hitBuilding = false;
+          if (!hitGround && window.structureSpatialGrid) {
+            const mx = p.mesh.position.x, mz = p.mesh.position.z, my = p.mesh.position.y;
+            const near = window.structureSpatialGrid.queryAABB(mx - 2.5, mx + 2.5, mz - 2.5, mz + 2.5);
+            if (near && near.length > 0) {
+              for (let n = 0; n < near.length; n++) {
+                const b = near[n];
+                if (my >= (b.minY || 0) && my <= (b.maxY || 60)) {
+                  hitBuilding = true;
+                  break;
+                }
+              }
+            }
           }
 
-          if (detonated) {
+          let hitPlane = false;
+          if (!hitGround && !hitBuilding && window.aiTraffic && window.aiTraffic.aircraft) {
+            for (let a = 0; a < window.aiTraffic.aircraft.length; a++) {
+              const ac = window.aiTraffic.aircraft[a];
+              if (!ac.isDestroyed && ac.pos && ac.pos.distanceTo(p.mesh.position) < ((ac.collisionRadius || 6.0) + 1.0)) {
+                hitPlane = true;
+                if (typeof ac.triggerDestruction === 'function') {
+                  ac.triggerDestruction(p.mesh.position);
+                }
+                break;
+              }
+            }
+          }
+
+          if (hitGround || hitBuilding || hitPlane || p.elapsed > 12.0) {
             detonateAIM9(p);
             const midx = window.activeMissiles ? window.activeMissiles.indexOf(p) : -1;
             if (midx !== -1) window.activeMissiles.splice(midx, 1);
@@ -14894,15 +16091,6 @@
 
       ctx.clearRect(0, 0, w, h);
 
-      // Optical combiner emerald tint (slightly higher opacity for additive blending)
-      ctx.fillStyle = 'rgba(10, 255, 170, 0.05)';
-      ctx.fillRect(0, 0, w, h);
-
-      // Combiner border — bright for additive visibility
-      ctx.strokeStyle = 'rgba(0, 255, 180, 0.70)';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(6, 6, w - 12, h - 12);
-
       const isArmed = window.weaponSystem ? window.weaponSystem.masterArm : false;
       const selectedType = window.weaponSystem ? window.weaponSystem.selectedType : 'BOMB';
 
@@ -14919,6 +16107,21 @@
         statusText = (remaining === 2) ? 'AIM-9 READY' : (remaining === 1 ? 'AIM-9 × 1' : 'AIM-9 [DEPLETED]');
       }
 
+      // Phosphor Glow Setup for maximum daylight & nighttime visibility under Additive Blending
+      ctx.save();
+      const hudGlowColor = isArmed ? '#ff3333' : '#00ffb0';
+      ctx.shadowColor = hudGlowColor;
+      ctx.shadowBlur = 10;
+
+      // Optical combiner emerald tint backing
+      ctx.fillStyle = 'rgba(10, 255, 170, 0.06)';
+      ctx.fillRect(0, 0, w, h);
+
+      // Combiner border — bright for additive visibility
+      ctx.strokeStyle = 'rgba(0, 255, 180, 0.75)';
+      ctx.lineWidth = 2.5;
+      ctx.strokeRect(6, 6, w - 12, h - 12);
+
       // 1. Top HUD Header: Master Arm Annunciator Pill
       const armBoxW = 160;
       const armBoxH = 28;
@@ -14927,10 +16130,12 @@
 
       if (isArmed) {
         const pulse = 0.7 + 0.3 * Math.sin(performance.now() * 0.010);
-        ctx.fillStyle = `rgba(255, 40, 40, ${0.6 * pulse})`;
+        ctx.fillStyle = `rgba(255, 40, 40, ${0.65 * pulse})`;
         ctx.fillRect(armBoxX, armBoxY, armBoxW, armBoxH);
-        ctx.strokeStyle = `rgba(255, 100, 100, ${pulse})`;
-        ctx.lineWidth = 2;
+        ctx.strokeStyle = `rgba(255, 120, 120, ${pulse})`;
+        ctx.lineWidth = 2.5;
+        ctx.shadowColor = '#ff2222';
+        ctx.shadowBlur = 12;
         ctx.strokeRect(armBoxX, armBoxY, armBoxW, armBoxH);
         ctx.fillStyle = '#ffffff';
         ctx.font = 'bold 15px monospace';
@@ -14938,29 +16143,36 @@
         ctx.textBaseline = 'middle';
         ctx.fillText('ARM: ACTIVE', cx, armBoxY + armBoxH / 2);
       } else {
-        ctx.strokeStyle = 'rgba(0, 255, 160, 0.80)';
-        ctx.lineWidth = 2;
+        ctx.strokeStyle = 'rgba(0, 255, 160, 0.85)';
+        ctx.lineWidth = 2.5;
+        ctx.shadowColor = '#00ffb0';
+        ctx.shadowBlur = 10;
         ctx.strokeRect(armBoxX, armBoxY, armBoxW, armBoxH);
-        ctx.fillStyle = '#00ffb0';
+        ctx.fillStyle = '#ffffff';
         ctx.font = 'bold 15px monospace';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText('ARM: SAFE', cx, armBoxY + armBoxH / 2);
       }
 
-      // 2. Collimated Central Reticle & Pipper — bright white under additive blending
-      const reticleColor = isArmed ? '#ff4444' : '#00ffb0';
-      ctx.strokeStyle = reticleColor;
-      ctx.lineWidth = 2;
+      // 2. Collimated Central Reticle & Pipper — bright white core with phosphor glow
+      ctx.strokeStyle = '#ffffff';
+      ctx.shadowColor = hudGlowColor;
+      ctx.shadowBlur = 12;
+      ctx.lineWidth = 2.5;
+
+      // Center pipper dot
       ctx.beginPath();
-      ctx.arc(cx, cy, 3, 0, Math.PI * 2);
-      ctx.fillStyle = reticleColor;
+      ctx.arc(cx, cy, 3.5, 0, Math.PI * 2);
+      ctx.fillStyle = '#ffffff';
       ctx.fill();
 
+      // Outer reticle circle
       ctx.beginPath();
       ctx.arc(cx, cy, 26, 0, Math.PI * 2);
       ctx.stroke();
 
+      // Crosshairs
       ctx.beginPath();
       ctx.moveTo(cx - 44, cy); ctx.lineTo(cx - 30, cy);
       ctx.moveTo(cx + 30, cy); ctx.lineTo(cx + 44, cy);
@@ -14968,12 +16180,14 @@
       ctx.moveTo(cx, cy + 30); ctx.lineTo(cx, cy + 44);
       ctx.stroke();
 
-      // 3. Flight Parameters: Airspeed (Left) & Altitude (Right) — bright
+      // 3. Flight Parameters: Airspeed (Left) & Altitude (Right) — white core with emerald phosphor glow
       const ias = Math.round(telemetry.ias || 0);
       const alt = Math.round(telemetry.altitude || 0);
 
-      ctx.fillStyle = '#00ffb0';
-      ctx.font = 'bold 17px monospace';
+      ctx.fillStyle = '#ffffff';
+      ctx.shadowColor = '#00ffb0';
+      ctx.shadowBlur = 10;
+      ctx.font = 'bold 18px monospace';
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
       ctx.fillText(`IAS ${ias}`, 20, cy);
@@ -14987,15 +16201,19 @@
       const stnBoxX = cx - stnBoxW / 2;
       const stnBoxY = h - 52;
 
-      ctx.strokeStyle = isArmed ? 'rgba(255, 80, 80, 0.90)' : 'rgba(0, 255, 160, 0.80)';
-      ctx.lineWidth = 1.8;
+      ctx.strokeStyle = isArmed ? 'rgba(255, 100, 100, 0.95)' : 'rgba(0, 255, 180, 0.85)';
+      ctx.lineWidth = 2.2;
+      ctx.shadowColor = hudGlowColor;
+      ctx.shadowBlur = 10;
       ctx.strokeRect(stnBoxX, stnBoxY, stnBoxW, stnBoxH);
 
-      ctx.fillStyle = isArmed ? '#ff8888' : '#00ffb0';
+      ctx.fillStyle = '#ffffff';
       ctx.font = 'bold 16px monospace';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(`${isArmed ? '◆ ' : ''}${statusText}${isArmed ? ' ◆' : ''}`, cx, stnBoxY + stnBoxH / 2);
+
+      ctx.restore();
     }
     window.draw3DCombinerHUD = draw3DCombinerHUD;
 
@@ -15397,12 +16615,23 @@
         });
         window.activeRocketSmoke.length = 0;
       }
+      if (window.rocketSmokePool && window.rocketSmokePool.length > 0) {
+        window.rocketSmokePool.forEach(p => {
+          p.active = false;
+          if (p.mesh) p.mesh.visible = false;
+        });
+      }
 
       updateGearBadge();
       updateFlapsBadge();
       updateArmUI();
       updateWeaponStationUI();
       resetCamera();
+
+      // Cleanly reset all AI Traffic to initial flight/taxi positions
+      if (window.aiTraffic && typeof window.aiTraffic.reset === 'function') {
+        window.aiTraffic.reset();
+      }
 
       // Reset Crash State, Fireball, Shockwaves, and Airframe Breakup
       window.isCrashed = false;
@@ -15419,7 +16648,9 @@
         rightAttached: true,
         severedSide: null,
         strikeSpeed: 0,
-        spinVelocity: 0
+        spinVelocity: 0,
+        hasFire: false,
+        fireSide: null
       };
 
       // Restore Outer Wing Groups if detached mid-span
@@ -15660,10 +16891,16 @@
         cockpitLook.yaw = 0.0;
         cockpitLook.pitch = -0.19;
         if (window.cockpitCanopy) window.cockpitCanopy.visible = true;
+        if (window.canopyOuterMeshes) {
+          window.canopyOuterMeshes.forEach(m => { if (m) m.visible = false; });
+        }
         // In cockpit view, minimize 2D dock so the real 3D instrument panel, yoke, throttle, and gear lever are unobstructed
         if (bottomDock) bottomDock.style.display = 'none';
       } else {
         if (window.cockpitCanopy) window.cockpitCanopy.visible = true;
+        if (window.canopyOuterMeshes) {
+          window.canopyOuterMeshes.forEach(m => { if (m) m.visible = true; });
+        }
         if (bottomDock) bottomDock.style.display = 'flex';
       }
     }
@@ -16159,15 +17396,15 @@
           const tipSpeedKnots = telemetry.ias || (Math.sqrt(linvel.x * linvel.x + linvel.z * linvel.z) * 1.94384);
 
           if (tipSpeedKnots > 15.0) {
-            // Wingtip contact with asphalt / terrain:
-            // Generates powerful asymmetric yaw torque and roll into ground, spinning the plane into a ground-loop
-            const yawSpinTorque = (isLeft ? -1 : 1) * Math.min(8500.0, tipSpeedKnots * 190.0);
-            const rollIntoGroundTorque = (isLeft ? -1 : 1) * Math.min(4500.0, tipSpeedKnots * 95.0);
+            // Wingtip contact with asphalt, grass, or natural terrain:
+            // Generates realistic asymmetric yaw torque and ground drag without violently catapulting into an instant crash
+            const yawSpinTorque = (isLeft ? -1 : 1) * Math.min(2200.0, tipSpeedKnots * 45.0);
+            const rollIntoGroundTorque = (isLeft ? -1 : 1) * Math.min(1100.0, tipSpeedKnots * 22.0);
             aircraftBody.addTorque({ x: 0, y: yawSpinTorque, z: rollIntoGroundTorque }, true);
 
             // Ground drag friction at tip
             aircraftBody.addForceAtPoint(
-              { x: -linvel.x * 0.45, y: Math.max(0, -linvel.y * 0.4), z: -linvel.z * 0.45 },
+              { x: -linvel.x * 0.35, y: Math.max(0, -linvel.y * 0.3), z: -linvel.z * 0.35 },
               { x: tipPos.x, y: groundThresholdY, z: tipPos.z },
               true
             );
@@ -16177,22 +17414,36 @@
               spawnTireSmoke(tipPos, new THREE.Vector3(0, 0.6, 0), 6);
             }
 
-            // Surface-Dependent Scraping Particles & Audio at wingtip (speeds above 25 knots)
+            // Surface-Dependent Scraping Particles & Audio on grass, runway, taxiway, dirt
+            const isPaved = isPavedSurface(tipPos.x, tipPos.z);
             if (tipSpeedKnots > 25.0 && typeof spawnGroundScrapeParticles === 'function') {
-              const isPaved = isPavedSurface(tipPos.x, tipPos.z);
-              spawnGroundScrapeParticles(tipPos, linvel, isPaved, tipSpeedKnots, isPaved ? 5 : 3);
+              spawnGroundScrapeParticles(tipPos, linvel, isPaved, tipSpeedKnots, isPaved ? 5 : 4);
               if (window.soundSystem) {
                 const tipIntensity = Math.min(1.0, tipSpeedKnots / 75.0) * 0.75;
-                if (isPaved) soundSystem.playMetalScrape(tipIntensity, true);
-                else soundSystem.playGroundGouge(tipIntensity);
+                if (isPaved && window.soundSystem.playMetalScrape) soundSystem.playMetalScrape(tipIntensity, true);
+                else if (window.soundSystem.playGroundGouge) soundSystem.playGroundGouge(tipIntensity);
               }
             }
 
-            // High-speed wing strike (> 28 kts) shears off wing assembly into tumbling world debris
-            if (tipSpeedKnots > 28.0 && !window.isCrashed) {
-              const strikeSide = isLeft ? 'left' : 'right';
-              if (window.wingState && window.wingState[strikeSide + 'Attached']) {
-                severWing(strikeSide, tipSpeedKnots, tipPos);
+            // Wing Ground Strike: Chance that part of wing breaks off and starts a small fire (does NOT immediately cause massive crash)
+            const strikeSide = isLeft ? 'left' : 'right';
+            if (tipSpeedKnots > 20.0 && !window.isCrashed && window.wingState && window.wingState[strikeSide + 'Attached']) {
+              if (!window._lastWingStrikeTime || (performance.now() - window._lastWingStrikeTime) > 800) {
+                window._lastWingStrikeTime = performance.now();
+                // 45% chance part of wing detaches on ground strike
+                if (Math.random() < 0.45) {
+                  severWing(strikeSide, tipSpeedKnots, tipPos);
+                  // 60% chance to ignite a small localized fire on the damaged wing
+                  if (Math.random() < 0.60) {
+                    window.wingState.hasFire = true;
+                    window.wingState.fireSide = strikeSide;
+                    if (window.atcSystem && typeof window.atcSystem.log === 'function') {
+                      window.atcSystem.log('HL8006', `WING STRIKE: PARTIAL ${strikeSide.toUpperCase()} WING SEPARATION WITH LOCALIZED FIRE`, 'pilot');
+                    }
+                  } else if (window.atcSystem && typeof window.atcSystem.log === 'function') {
+                    window.atcSystem.log('HL8006', `WING STRIKE: PARTIAL ${strikeSide.toUpperCase()} WING SEPARATION`, 'pilot');
+                  }
+                }
               }
             }
           }
@@ -16297,6 +17548,7 @@
       if (cameraMode === 'chase') {
         if (window.singlePilotSeat) window.singlePilotSeat.visible = true;
         if (window.cockpitCanopy) window.cockpitCanopy.visible = true;
+        if (window.canopyOuterMeshes) window.canopyOuterMeshes.forEach(m => { if (m) m.visible = true; });
 
         // Orbit angle relative to aircraft heading
         const orbitQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(-cameraState.pitch, cameraState.yaw, 0, 'YXZ'));
@@ -16319,6 +17571,7 @@
         // Hide front pilot ejection seat to prevent head clipping while keeping rear instructor seat visible
         if (window.singlePilotSeat) window.singlePilotSeat.visible = false;
         if (window.cockpitCanopy) window.cockpitCanopy.visible = true;
+        if (window.canopyOuterMeshes) window.canopyOuterMeshes.forEach(m => { if (m) m.visible = false; });
 
         // 1. Dynamic Head Inertia & G-Loads
         const linvel = aircraftBody.linvel();
@@ -16362,7 +17615,9 @@
         camera.quaternion.copy(_targetQuat);
 
       } else if (cameraMode === 'flyby') {
+        if (window.singlePilotSeat) window.singlePilotSeat.visible = true;
         if (window.cockpitCanopy) window.cockpitCanopy.visible = true;
+        if (window.canopyOuterMeshes) window.canopyOuterMeshes.forEach(m => { if (m) m.visible = true; });
         _camTarget.copy(planePos);
         camera.lookAt(_camTarget);
       }
@@ -18505,25 +19760,8 @@
         if (typeof updateProjectiles === 'function') {
           updateProjectiles(dt);
         }
-        // Update persistent rocket smoke highway particles
-        if (window.activeRocketSmoke && window.activeRocketSmoke.length > 0) {
-          for (let i = window.activeRocketSmoke.length - 1; i >= 0; i--) {
-            const s = window.activeRocketSmoke[i];
-            s.age += dt;
-            if (s.age >= s.maxAge) {
-              if (s.mesh.parent) s.mesh.parent.remove(s.mesh);
-              window.activeRocketSmoke.splice(i, 1);
-              continue;
-            }
-            // Slowly drift upward and expand
-            s.mesh.position.addScaledVector(s.vel, dt);
-            const lifeRatio = s.age / s.maxAge;
-            s.mesh.scale.setScalar(1.0 + lifeRatio * 2.8);
-            // Fade out in last 40% of life
-            if (s.material) {
-              s.material.opacity = Math.max(0, (1.0 - lifeRatio) * 0.7);
-            }
-          }
+        if (typeof updateRocketSmoke === 'function') {
+          updateRocketSmoke(dt);
         }
         updateDebris(dt);
         updateFireball(dt);
